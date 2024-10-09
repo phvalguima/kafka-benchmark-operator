@@ -1,0 +1,15 @@
+prepare:
+  description: |
+    Prepares the database.
+
+run:
+  description: |
+    Kickstarts the sysbench service in this server.
+
+stop:
+  description: |
+    Stops the sysbench service in this server.
+
+clean:
+  description: |
+    Cleans up the database.
