@@ -47,7 +47,10 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
     @override
     def list_supported_workloads(self) -> list[str]:
         """List the supported workloads."""
-        return os.listdir("src/workload_parameter_templates")
+        return [
+            ".".join(name.split(".")[:-2])
+            for name in os.listdir("src/workload_parameter_templates")
+        ]
 
     @override
     def _setup_db_relation(self, relation_names: list[str]):

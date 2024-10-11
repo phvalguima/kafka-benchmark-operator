@@ -2,29 +2,14 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from unittest.mock import MagicMock, PropertyMock, patch
-
-import pytest
-from ops.testing import Harness
+from unittest.mock import MagicMock, patch
 
 from benchmark.constants import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
 from benchmark.service import DPBenchmarkService
-from charm import OpenSearchBenchmarkOperator
 from models import OpenSearchExecutionExtraConfigsModel
 
 
-@pytest.fixture
-def harness():
-    harness = Harness(OpenSearchBenchmarkOperator)
-
-    with patch("ops.model.Model.name", new_callable=PropertyMock) as mock_name:
-        mock_name.return_value = "test_model"
-        harness.begin()
-
-    return harness
-
-
-def test_is_prepared(harness):
+def test_is_prepared(harness, mock_makedirs):
     with patch("os.path.exists") as mock_exists:
         service = DPBenchmarkService()
         mock_exists.return_value = True
@@ -33,7 +18,7 @@ def test_is_prepared(harness):
         assert not service.is_prepared()
 
 
-def test_render_service_executable(harness):
+def test_render_service_executable(harness, mock_makedirs):
     with patch("shutil.copyfile") as mock_copyfile, patch("os.chmod") as mock_chmod:
         service = DPBenchmarkService()
         service.render_service_executable()
@@ -43,7 +28,7 @@ def test_render_service_executable(harness):
         mock_chmod.assert_called_once_with("/usr/bin/dpe_benchmark.py", 0o755)
 
 
-def test_render_service_file(harness):
+def test_render_service_file(harness, mock_makedirs):
     with (
         patch("benchmark.service._render") as mock_render,
         patch("benchmark.service.daemon_reload") as mock_daemon_reload,
@@ -87,7 +72,7 @@ def test_render_service_file(harness):
         mock_daemon_reload.assert_called_once()
 
 
-def test_is_running(harness):
+def test_is_running(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
         patch("benchmark.service.service_running") as mock_service_running,
@@ -100,7 +85,7 @@ def test_is_running(harness):
         assert not service.is_running()
 
 
-def test_is_failed(harness):
+def test_is_failed(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
         patch("benchmark.service.service_failed") as mock_service_failed,
@@ -113,7 +98,7 @@ def test_is_failed(harness):
         assert not service.is_failed()
 
 
-def test_stop(harness):
+def test_stop(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
         patch("benchmark.service.service_stop") as mock_service_stop,
@@ -126,7 +111,7 @@ def test_stop(harness):
         mock_service_stop.assert_called_once()
 
 
-def test_run(harness):
+def test_run(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
         patch("benchmark.service.service_restart") as mock_service_restart,
@@ -139,7 +124,7 @@ def test_run(harness):
         mock_service_restart.assert_called_once()
 
 
-def test_unset(harness):
+def test_unset(harness, mock_makedirs):
     with (
         patch("os.remove") as mock_remove,
         patch("benchmark.service.daemon_reload") as mock_daemon_reload,
@@ -155,5 +140,7 @@ def test_unset(harness):
         mock_daemon_reload.return_value = True
         assert service.unset()
         mock_service_stop.assert_called_once()
-        mock_remove.assert_called_once_with(service.svc_path)
+
+        mock_remove.assert_any_call(service.svc_path)
+        mock_remove.assert_any_call(service.workload_parameter_path)
         mock_daemon_reload.assert_called_once()

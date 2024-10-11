@@ -50,20 +50,32 @@ jobs:
           use-labels: false
           fail-build: ${{ github.event_name == 'pull_request' }}
 
-#   build:
-#     name: Build charm
-#     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v22.0.0
-#     with:
-#       cache: true
+  # build:
+  #   name: Build charm
+  #   uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v22.0.0
+  #   with:
+  #     cache: true
 
-#   integration-test:
-#     name: Integration test charm
-#     needs:
-#       - lint
-#       - unit-test
-#       - build
-#     uses: canonical/data-platform-workflows/.github/workflows/integration_test_charm.yaml@v22.0.0
-#     with:
-#       artifact-prefix: packed-charm-cache-true
-#       cloud: lxd
-#       juju-snap-channel: 3.4/stable
+  # integration-test:
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       juju:
+  #         # This runs on all runs
+  #         - agent: 3.5.3 # renovate: juju-agent-pin-minor
+  #           allure_report: true
+  #         # This runs only on scheduled runs, DPW 21 specifics (scheduled + 3.6/X)
+  #         - snap_channel: 3.6/beta
+  #           allure_report: false
+  #   name: Integration test charm | ${{ matrix.juju.agent || matrix.juju.snap_channel }}
+  #   needs:
+  #     - lint
+  #     - unit-test
+  #     - build
+  #   uses: canonical/data-platform-workflows/.github/workflows/integration_test_charm.yaml@v22.0.0
+  #   with:
+  #     juju-agent-version: ${{ matrix.juju.agent }}
+  #     juju-snap-channel: ${{ matrix.juju.snap_channel }}
+  #     _beta_allure_report: ${{ matrix.juju.allure_report }}
+  #     artifact-prefix: packed-charm-cache-true
+  #     cloud: lxd

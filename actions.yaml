@@ -1,3 +1,7 @@
+list-workloads:
+  description: |
+    Lists all the workloads available in this server.
+
 prepare:
   description: |
     Prepares the database.

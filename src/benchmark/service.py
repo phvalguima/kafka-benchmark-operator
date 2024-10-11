@@ -5,7 +5,6 @@
 
 import os
 import shutil
-from abc import abstractmethod
 from typing import Any, Dict, Optional
 
 from charms.operator_libs_linux.v1.systemd import (
@@ -48,12 +47,22 @@ class DPBenchmarkService:
         """Returns the path to the service file."""
         return self.SVC_PATH
 
+    @property
+    def executable(self) -> str:
+        """Returns the path to the service executable."""
+        return self.SVC_EXECUTABLE_PATH + self.SVC_NAME + ".py"
+
+    @property
+    def workload_parameter_path(self) -> str:
+        """Returns the path to the workload parameters file."""
+        if not os.path.exists("/root/.benchmark/charmed_parameters"):
+            os.makedirs("/root/.benchmark/charmed_parameters", exist_ok=True)
+        return "/root/.benchmark/charmed_parameters/" + self.SVC_NAME + ".json"
+
     def render_service_executable(self) -> bool:
         """Render the benchmark service executable."""
-        shutil.copyfile(
-            "templates/" + self.SVC_NAME + ".py", self.SVC_EXECUTABLE_PATH + self.SVC_NAME + ".py"
-        )
-        os.chmod(self.SVC_EXECUTABLE_PATH + self.SVC_NAME + ".py", 0o755)
+        shutil.copyfile("templates/" + self.SVC_NAME + ".py", self.executable)
+        os.chmod(self.executable, 0o755)
 
     def render_service_file(
         self,
@@ -82,14 +91,53 @@ class DPBenchmarkService:
         )
         return daemon_reload()
 
+    def render_workload_parameters(
+        self,
+        db: DPBenchmarkExecutionModel,
+        workload_name: str,
+    ):
+        """Renders the workload parameters file."""
+        _render(
+            "workload_parameter_templates/" + workload_name + ".json.j2",
+            self.workload_parameter_path,
+            {
+                "index_name": db.db_info.db_name,
+                "clients": db.clients,
+                "duration": db.duration,
+            },
+        )
+
     def is_prepared(self) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
-        return os.path.exists(self.svc_path)
+        return (
+            os.path.exists(self.svc_path)
+            and os.path.exists(self.workload_parameter_path)
+            and os.path.exists(self.executable)
+        )
 
-    @abstractmethod
-    def prepare(self) -> bool:
+    def prepare(
+        self,
+        db: DPBenchmarkExecutionModel,
+        workload_parameter_template_path: str,
+        labels: Optional[str] = "",
+        extra_config: Optional[str] = "",
+    ) -> bool:
         """Prepare the benchmark service."""
-        pass
+        try:
+            if not self.render_service_file(
+                db=db,
+                labels=labels,
+                extra_config=extra_config,
+            ):
+                return False
+            self.render_workload_parameters(
+                db=db,
+                labels=labels,
+                workload_parameter_template_path=workload_parameter_template_path,
+            )
+        except Exception:
+            return False
+        return True
 
     def is_running(self) -> bool:
         """Checks if the benchmark service is running."""
@@ -118,8 +166,10 @@ class DPBenchmarkService:
     def unset(self) -> bool:
         """Unset the benchmark service."""
         try:
-            result = self.stop()
+            if not (result := self.stop() and daemon_reload()):
+                return False
             os.remove(self.svc_path)
-            return daemon_reload() and result
+            os.remove(self.workload_parameter_path)
         except Exception:
-            pass
+            return False
+        return result

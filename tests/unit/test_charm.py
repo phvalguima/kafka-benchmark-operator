@@ -4,7 +4,6 @@
 
 from unittest.mock import PropertyMock, patch
 
-import pytest
 from ops.model import ActiveStatus
 from ops.testing import Harness
 
@@ -14,15 +13,18 @@ from benchmark.benchmark_charm import (
 from charm import OpenSearchBenchmarkOperator
 
 
-@pytest.fixture
-def harness():
+def test_wrong_workload_name():
     harness = Harness(OpenSearchBenchmarkOperator)
 
     with patch("ops.model.Model.name", new_callable=PropertyMock) as mock_name:
         mock_name.return_value = "test_model"
-        harness.begin()
-
-    return harness
+        exc = None
+        try:
+            harness.update_config({"workload_name": "wrong_workload"})
+            harness.begin()
+        except AssertionError as e:
+            exc = str(e)
+        assert exc == "Invalid workload name"
 
 
 def test_on_install(harness):
@@ -45,3 +47,14 @@ def test_on_install(harness):
         mock_check_output.assert_called_once()
         assert isinstance(harness.charm.unit.status, ActiveStatus)
     assert harness.charm.database.check() == DatabaseRelationStatus.NOT_AVAILABLE
+
+
+def test_list_supported_workloads(harness):
+    with patch("os.listdir") as mock_listdir:
+        mock_listdir.return_value = [
+            "workload1.template.json",
+            "workload2.template.json",
+            "workload3.template.json",
+        ]
+        expected_workloads = ["workload1", "workload2", "workload3"]
+        assert harness.charm.list_supported_workloads() == expected_workloads

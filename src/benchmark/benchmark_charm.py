@@ -54,6 +54,7 @@ class DPBenchmarkCharm(ops.CharmBase):
         self.framework.observe(self.on.stop_action, self.on_stop_action)
         self.framework.observe(self.on.clean_action, self.on_clean_action)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.list_workloads_action, self.on_list_workloads_action)
 
         self.framework.observe(self.on[PEER_RELATION].relation_joined, self._on_peer_changed)
         self.framework.observe(self.on[PEER_RELATION].relation_changed, self._on_peer_changed)
@@ -72,6 +73,15 @@ class DPBenchmarkCharm(ops.CharmBase):
         self.database = None
         self.benchmark_status = BenchmarkStatus(self, PEER_RELATION, self.SERVICE_CLS())
         self.labels = ",".join([self.model.name, self.unit.name])
+
+        # We need to narrow the options of workload_name to the supported ones
+        if self.config.get("workload_name", "nyc_taxis") not in self.list_supported_workloads():
+            self.unit.status = ops.model.BlockedStatus("Unsupported workload")
+            logger.error(f"Unsupported workload {self.config.get("workload_name", "nyc_taxis")}")
+            # Assert exception makes sense here
+            assert (
+                self.config.get("workload_name", "nyc_taxis") in self.list_supported_workloads()
+            ), "Invalid workload name"
 
     def _setup_db_relation(self, relation_names: List[str]):
         """Setup the database relation."""
@@ -200,12 +210,17 @@ class DPBenchmarkCharm(ops.CharmBase):
                 event.defer()
         return None
 
+    def on_list_workloads_action(self, event):
+        """Lists all possible workloads."""
+        event.set_results({"workloads": self.list_supported_workloads()})
+
     def on_prepare_action(self, event):
         """Prepare the database.
 
         There are two steps: the actual prepare command and setting a target to inform the
         prepare was successful.
         """
+        self.unit.status = ops.model.MaintenanceStatus("Checking status...")
         if not self.unit.is_leader():
             event.fail("Failed: only leader can prepare the database")
             return
@@ -228,16 +243,18 @@ class DPBenchmarkCharm(ops.CharmBase):
         except DPBenchmarkExecError:
             event.fail("Failed: error in benchmark while executing prepare")
             return
-        if not self._setup_service():
-            event.fail("Failed: missing database options")
-        event.set_results({"status": "prepared"})
 
-    def _setup_service(self) -> bool:
-        self.unit.status = ops.model.MaintenanceStatus("Setting up benchmark")
-        if not (options := self.database.get_execution_options()):
-            return False
-        self.SERVICE_CLS().render_service_file(options, labels=self.labels)
+        if not self.SERVICE_CLS().prepare(
+            db=self.database.get_execution_options(),
+            workload_parameter_template_path=self.database.get_workload_parameter_template_path(
+                workload_name=self.config.get("workload_name")
+            ),
+            labels=self.labels,
+        ):
+            event.fail("Failed: missing database options")
+
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)
+        event.set_results({"status": "prepared"})
 
     def on_run_action(self, event):
         """Run benchmark action."""
