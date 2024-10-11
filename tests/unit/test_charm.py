@@ -30,10 +30,12 @@ def test_wrong_workload_name():
 def test_on_install(harness):
     with (
         patch("os.remove") as mock_remove,
+        patch("os.path.exists") as mock_exists,
         patch("benchmark.benchmark_charm.apt") as mock_apt,
         patch("subprocess.check_output") as mock_check_output,
         patch("benchmark.service.DPBenchmarkService.render_service_executable"),
     ):
+        mock_exists.return_value = True
         harness.charm._on_install(None)
         mock_apt.update.assert_called()
         mock_apt.add_package.assert_any_call([
@@ -43,6 +45,7 @@ def test_on_install(harness):
         ])
         mock_apt.add_package.assert_any_call(["python3-pip"])
 
+        mock_exists.assert_called_once_with("/usr/lib/python3.12/EXTERNALLY-MANAGED")
         mock_remove.assert_called_once()
         mock_check_output.assert_called_once()
         assert isinstance(harness.charm.unit.status, ActiveStatus)
