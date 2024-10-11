@@ -45,6 +45,11 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
         self._setup_db_relation(["opensearch"])
 
     @override
+    def list_supported_workloads(self) -> list[str]:
+        """List the supported workloads."""
+        return os.listdir("src/workload_parameter_templates")
+
+    @override
     def _setup_db_relation(self, relation_names: list[str]):
         """Setup the database relation."""
         self.database = OpenSearchDatabaseRelationManager(

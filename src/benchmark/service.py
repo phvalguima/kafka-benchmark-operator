@@ -56,7 +56,10 @@ class DPBenchmarkService:
         os.chmod(self.SVC_EXECUTABLE_PATH + self.SVC_NAME + ".py", 0o755)
 
     def render_service_file(
-        self, db: DPBenchmarkExecutionModel, labels: Optional[str] = ""
+        self,
+        db: DPBenchmarkExecutionModel,
+        labels: Optional[str] = "",
+        extra_config: Optional[str] = "",
     ) -> bool:
         """Render the systemd service file."""
         _render(
@@ -74,6 +77,7 @@ class DPBenchmarkService:
                 "duration": db.duration,
                 "workload_params": db.db_info.workload_params,
                 "extra_labels": labels,
+                "extra_config": str(db.extra) + " " + extra_config,
             },
         )
         return daemon_reload()

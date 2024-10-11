@@ -5,14 +5,12 @@
 
 import os
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, root_validator
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
-
-INDEX_NAME = "benchmark_index"
 
 METRICS_PORT = 8088
 COS_AGENT_RELATION = "cos-agent"
@@ -89,6 +87,26 @@ class DatabaseRelationStatus(Enum):
     ERROR = "error"
 
 
+class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
+    """Holds all the details of the sysbench execution extra config.
+
+    This model defines a basic conversion to a string of extra options to be considered.
+    """
+
+    extra_config: dict[str, Any] = {}
+
+    def __str__(self):
+        """Returns a string of extra options to be considered."""
+        cfg = ""
+        for key, val in self.extra_config.items():
+            prefix = "--" if len(key) > 1 else "-"
+            if val is None:
+                cfg += f"{prefix}{key} "
+            else:
+                cfg += f"{prefix}{key}={val} "
+        return cfg
+
+
 class DPBenchmarkExecutionModel(BaseModel):
     """Benchmark execution model.
 
@@ -99,6 +117,7 @@ class DPBenchmarkExecutionModel(BaseModel):
     duration: int
     clients: int
     db_info: DPBenchmarkBaseDatabaseModel
+    extra: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel()
 
 
 class DPBenchmarkExecStatus(Enum):

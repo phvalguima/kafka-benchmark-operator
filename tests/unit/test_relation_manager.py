@@ -13,6 +13,7 @@ from benchmark.relation_manager import (
     DPBenchmarkMultipleRelationsToDBError,
 )
 from charm import OpenSearchBenchmarkOperator
+from models import OpenSearchExecutionExtraConfigsModel
 
 
 @pytest.fixture
@@ -90,6 +91,7 @@ def test_relation_get_execution_options(harness, database_relation):
         duration=0,
         clients=8,
         db_info=harness.charm.database.get_database_options(),
+        extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
     )
 
     options = harness.charm.database.get_execution_options()

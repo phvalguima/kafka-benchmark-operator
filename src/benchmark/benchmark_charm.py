@@ -308,3 +308,8 @@ class DPBenchmarkCharm(ops.CharmBase):
     def _execute_benchmark_cmd(self, extra_labels, command: str):
         """Execute the benchmark command."""
         pass
+
+    @abstractmethod
+    def list_supported_workloads(self) -> list[str]:
+        """List the supported workloads."""
+        pass

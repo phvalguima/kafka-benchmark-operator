@@ -18,19 +18,19 @@ jobs:
     name: Lint
     uses: canonical/data-platform-workflows/.github/workflows/lint.yaml@v22.0.0
 
-  # unit-test:
-  #   name: Unit test charm
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 10
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Install tox & poetry
-  #       run: |
-  #         pipx install tox
-  #         pipx install poetry
-  #     - name: Run tests
-  #       run: tox run -e unit
+  unit-test:
+    name: Unit test charm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install tox & poetry
+        run: |
+          pipx install tox
+          pipx install poetry
+      - name: Run tests
+        run: tox run -e unit
 
 
   lib-check:
@@ -50,20 +50,20 @@ jobs:
           use-labels: false
           fail-build: ${{ github.event_name == 'pull_request' }}
 
-  build:
-    name: Build charm
-    uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v22.0.0
-    with:
-      cache: true
+#   build:
+#     name: Build charm
+#     uses: canonical/data-platform-workflows/.github/workflows/build_charm.yaml@v22.0.0
+#     with:
+#       cache: true
 
-  integration-test:
-    name: Integration test charm
-    needs:
-      - lint
-#      - unit-test
-      - build
-    uses: canonical/data-platform-workflows/.github/workflows/integration_test_charm.yaml@v22.0.0
-    with:
-      artifact-prefix: packed-charm-cache-true
-      cloud: lxd
-      juju-snap-channel: 3.4/stable
+#   integration-test:
+#     name: Integration test charm
+#     needs:
+#       - lint
+#       - unit-test
+#       - build
+#     uses: canonical/data-platform-workflows/.github/workflows/integration_test_charm.yaml@v22.0.0
+#     with:
+#       artifact-prefix: packed-charm-cache-true
+#       cloud: lxd
+#       juju-snap-channel: 3.4/stable

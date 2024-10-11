@@ -19,6 +19,7 @@ from ops.model import Relation
 from benchmark.constants import (
     DatabaseRelationStatus,
     DPBenchmarkBaseDatabaseModel,
+    DPBenchmarkExecutionExtraConfigsModel,
     DPBenchmarkExecutionModel,
     DPBenchmarkMultipleRelationsToDBError,
 )
@@ -123,7 +124,10 @@ class DatabaseRelationManager(Object):
         """Handles the endpoints_changed event."""
         self.on.db_config_update.emit()
 
-    def get_execution_options(self) -> Optional[DPBenchmarkExecutionModel]:
+    def get_execution_options(
+        self,
+        extra_config: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel(),
+    ) -> Optional[DPBenchmarkExecutionModel]:
         """Returns the execution options."""
         if not (db := self.get_database_options()):
             # It means we are not yet ready. Return None
@@ -134,6 +138,7 @@ class DatabaseRelationManager(Object):
             duration=self.charm.config.get("duration"),
             clients=self.charm.config.get("clients"),
             db_info=db,
+            extra=extra_config,
         )
 
     def chosen_db_type(self) -> Optional[str]:
@@ -150,9 +155,4 @@ class DatabaseRelationManager(Object):
     @abstractmethod
     def relation_data(self):
         """Returns the relation data."""
-        pass
-
-    @abstractmethod
-    def script(self) -> Optional[str]:
-        """Returns the script path for the chosen DB."""
         pass

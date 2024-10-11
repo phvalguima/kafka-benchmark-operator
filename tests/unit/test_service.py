@@ -10,6 +10,7 @@ from ops.testing import Harness
 from benchmark.constants import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
 from benchmark.service import DPBenchmarkService
 from charm import OpenSearchBenchmarkOperator
+from models import OpenSearchExecutionExtraConfigsModel
 
 
 @pytest.fixture
@@ -48,17 +49,21 @@ def test_render_service_file(harness):
         patch("benchmark.service.daemon_reload") as mock_daemon_reload,
     ):
         service = DPBenchmarkService()
-        db = MagicMock(spec=DPBenchmarkExecutionModel)
-        db.db_info = MagicMock(spec=DPBenchmarkBaseDatabaseModel)
+        db = DPBenchmarkExecutionModel(
+            db_info=DPBenchmarkBaseDatabaseModel(
+                hosts=["localhost"],
+                workload_name="workload",
+                db_name="test_index",
+                username="user",
+                password="pass",
+                workload_params={},
+            ),
+            threads=4,
+            clients=10,
+            duration=60,
+            extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
+        )
 
-        db.db_info.hosts = "localhost"
-        db.db_info.workload_name = "workload"
-        db.threads = 4
-        db.clients = 10
-        db.db_info.username = "user"
-        db.db_info.password = "pass"
-        db.duration = 60
-        db.db_info.workload_params = "params"
         mock_daemon_reload.return_value = True
 
         result = service.render_service_file(db)
@@ -74,8 +79,9 @@ def test_render_service_file(harness):
                 "db_user": "user",
                 "db_password": "pass",
                 "duration": 60,
-                "workload_params": "params",
+                "workload_params": {},
                 "extra_labels": "",
+                "extra_config": " ",
             },
         )
         mock_daemon_reload.assert_called_once()

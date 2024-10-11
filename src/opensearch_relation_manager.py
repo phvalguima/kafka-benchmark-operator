@@ -11,10 +11,12 @@ from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource
 from overrides import override
 
-from benchmark.constants import (
-    INDEX_NAME,
-)
+from benchmark.constants import DPBenchmarkExecutionExtraConfigsModel, DPBenchmarkExecutionModel
 from benchmark.relation_manager import DatabaseRelationManager
+from models import (
+    INDEX_NAME,
+    OpenSearchExecutionExtraConfigsModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,14 @@ class OpenSearchDatabaseRelationManager(DatabaseRelationManager):
         return list(self.relations["opensearch"].fetch_relation_data().values())[0]
 
     @override
-    def script(self) -> Optional[str]:
-        """Returns the script path for the chosen DB."""
-        pass
+    def get_execution_options(
+        self,
+        extra_config: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel(),
+    ) -> Optional[DPBenchmarkExecutionModel]:
+        """Returns the execution options."""
+        return super().get_execution_options(
+            extra_config=OpenSearchExecutionExtraConfigsModel(
+                run_count=self.charm.config.get("run_count", 0),
+                test_mode=self.charm.config.get("test_mode", False),
+            )
+        )
