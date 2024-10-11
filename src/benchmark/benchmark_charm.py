@@ -77,7 +77,7 @@ class DPBenchmarkCharm(ops.CharmBase):
         # We need to narrow the options of workload_name to the supported ones
         if self.config.get("workload_name", "nyc_taxis") not in self.list_supported_workloads():
             self.unit.status = ops.model.BlockedStatus("Unsupported workload")
-            logger.error(f"Unsupported workload {self.config.get("workload_name", "nyc_taxis")}")
+            logger.error(f"Unsupported workload {self.config.get('workload_name', 'nyc_taxis')}")
             # Assert exception makes sense here
             assert (
                 self.config.get("workload_name", "nyc_taxis") in self.list_supported_workloads()
