@@ -44,9 +44,15 @@ class BenchmarkStatus(ops.Object):
         """Sets the status in the relation."""
         if not self._relation:
             return
-        if self.charm.unit.is_leader():
-            self._relation.data[self.charm.app]["status"] = status.value
         self._relation.data[self.charm.unit]["status"] = status.value
+
+    def get(self) -> DPBenchmarkExecStatus:
+        """Sets the status in the relation."""
+        if not self._relation:
+            return DPBenchmarkExecStatus.UNSET
+        return DPBenchmarkExecStatus(
+            self._relation.data[self.charm.unit].get("status", DPBenchmarkExecStatus.UNSET.value)
+        )
 
     def _has_error_happened(self) -> bool:
         for unit in self._relation.units:
@@ -58,14 +64,22 @@ class BenchmarkStatus(ops.Object):
         )
 
     def service_status(self) -> DPBenchmarkExecStatus:
-        """Returns the status of the sysbench service."""
-        if not self.svc.is_prepared():
+        """Returns the status of the sysbench service.
+
+        This method will be relevant in two moments: (1) deciding if we can execute a given action
+        and (2) deciding the final status to report back to the user.
+        """
+        if not self.svc.is_prepared() and self.get() == DPBenchmarkExecStatus.UNSET:
             return DPBenchmarkExecStatus.UNSET
+        # Running and failed take priority: we do not check self.get()
+        # as they reveal a lot of information about current benchmark status
         if self.svc.is_failed():
             return DPBenchmarkExecStatus.ERROR
         if self.svc.is_running():
             return DPBenchmarkExecStatus.RUNNING
-        if self.svc.is_stopped():
+
+        # We are only stopped if we are marked as stopped and actually set as stopped in our state
+        if self.svc.is_stopped() and self.get() == DPBenchmarkExecStatus.STOPPED:
             return DPBenchmarkExecStatus.STOPPED
         return DPBenchmarkExecStatus.PREPARED
 

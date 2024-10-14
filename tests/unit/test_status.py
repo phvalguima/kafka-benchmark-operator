@@ -65,7 +65,6 @@ def test_set_status(harness):
     harness.set_leader(True)
 
     benchmark_status.set(DPBenchmarkExecStatus.RUNNING)
-    assert relation.data[charm.app]["status"] == DPBenchmarkExecStatus.RUNNING.value
     assert relation.data[charm.unit]["status"] == DPBenchmarkExecStatus.RUNNING.value
 
 
