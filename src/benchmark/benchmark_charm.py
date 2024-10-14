@@ -246,10 +246,7 @@ class DPBenchmarkCharm(ops.CharmBase):
 
         if not self.SERVICE_CLS().prepare(
             db=self.database.get_execution_options(),
-            workload_parameter_template_path=self.database.get_workload_parameter_template_path(
-                workload_name=self.config.get("workload_name")
-            ),
-            labels=self.labels,
+            workload_name=self.config["workload_name"],
         ):
             event.fail("Failed: missing database options")
 

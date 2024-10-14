@@ -65,59 +65,20 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
 
     @override
     def _on_install(self, event):
-        super()._on_install(event)
-        self._install_packages(["python3-pip"])
+        self._install_packages(["python3-pip", "python3-prometheus-client", "unzip"])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")
         subprocess.check_output("pip3 install opensearch-benchmark".split())
 
-    @override
-    def on_prepare_action(self, event):
-        """Prepare the benchmark service."""
-        if not self.unit.is_leader():
-            event.fail("Failed: only leader can prepare the database")
-            return
-        if not (status := self.check()):
-            event.fail(
-                f"Failed: app level reports {self.benchmark_status.app_status()} and service level reports {self.benchmark_status.service_status()}"
-            )
-            return
-        if status != DPBenchmarkExecStatus.UNSET:
-            event.fail(
-                "Failed: benchmark is already prepared, stop and clean up the cluster first"
-            )
-        if not self._setup_service():
-            event.fail("Failed: missing database options")
-        event.set_results({"status": "prepared"})
+        # In this case, we want to first inst
+        super()._on_install(event)
 
     @override
     def _execute_benchmark_cmd(self, extra_labels, command: str):
         """Execute the benchmark command."""
-        if not (db := self.database.get_execution_options()):
-            raise DPBenchmarkMissingOptionsError("Missing database options")
-        try:
-            output = subprocess.check_output(
-                [
-                    "/usr/bin/osb_svc.py",
-                    f"--command={command}",
-                    f"--target_hosts={db.db_info.hosts}",
-                    f"--workload={db.db_info.workload}",
-                    f"--threads={db.threads}",
-                    f"--clients={db.clients}",
-                    f"--db_user={db.db_info.username}",
-                    f"--db_password={db.db_info.password}",
-                    f"--duration={db.duration}",
-                    f"--workload_params={db.db_info.workload_params}",
-                    f"--extra_labels={extra_labels}",
-                ],
-                timeout=86400,
-            )
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Process failed with: {e}")
-            self.benchmark_status.set(DPBenchmarkExecStatus.ERROR)
-            raise DPBenchmarkExecError()
-        logger.debug("benchmark output: %s", output)
+        # There is no reson to execute any other command besides run for OSB.
+        pass
 
     def _generate_workload_params(self):
         return {}

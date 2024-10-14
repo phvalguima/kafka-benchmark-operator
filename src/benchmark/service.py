@@ -22,10 +22,12 @@ from .constants import (
 
 
 def _render(src_template_file: str, dst_filepath: str, values: Dict[str, Any]):
-    templates_dir = os.path.join(os.environ.get("CHARM_DIR", ""), "templates")
+    folder = os.path.dirname(src_template_file) or "templates"
+    filename = os.path.basename(src_template_file)
+    templates_dir = os.path.join(os.environ.get("CHARM_DIR", ""), folder)
     template_env = Environment(loader=FileSystemLoader(templates_dir))
     try:
-        template = template_env.get_template(src_template_file)
+        template = template_env.get_template(filename)
         content = template.render(values)
     except exceptions.TemplateNotFound as e:
         raise e
@@ -98,7 +100,7 @@ class DPBenchmarkService:
     ):
         """Renders the workload parameters file."""
         _render(
-            "workload_parameter_templates/" + workload_name + ".json.j2",
+            "src/workload_parameter_templates/" + workload_name + ".json.j2",
             self.workload_parameter_path,
             {
                 "index_name": db.db_info.db_name,
@@ -118,7 +120,7 @@ class DPBenchmarkService:
     def prepare(
         self,
         db: DPBenchmarkExecutionModel,
-        workload_parameter_template_path: str,
+        workload_name: str,
         labels: Optional[str] = "",
         extra_config: Optional[str] = "",
     ) -> bool:
@@ -132,8 +134,7 @@ class DPBenchmarkService:
                 return False
             self.render_workload_parameters(
                 db=db,
-                labels=labels,
-                workload_parameter_template_path=workload_parameter_template_path,
+                workload_name=workload_name,
             )
         except Exception:
             return False

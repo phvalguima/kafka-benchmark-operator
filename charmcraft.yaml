@@ -21,7 +21,7 @@ parts:
     build-snaps:
       - rustup
     prime:
-      - scripts
+      - src/workload_parameter_templates
     build-packages:
       - libffi-dev
       - libssl-dev
