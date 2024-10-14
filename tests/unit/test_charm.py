@@ -38,12 +38,13 @@ def test_on_install(harness):
         mock_exists.return_value = True
         harness.charm._on_install(None)
         mock_apt.update.assert_called()
+
         mock_apt.add_package.assert_any_call([
+            "python3-pip",
             "python3-prometheus-client",
-            "python3-jinja2",
             "unzip",
+            "python3-jinja2",
         ])
-        mock_apt.add_package.assert_any_call(["python3-pip"])
 
         mock_exists.assert_called_once_with("/usr/lib/python3.12/EXTERNALLY-MANAGED")
         mock_remove.assert_called_once()

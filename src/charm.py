@@ -23,11 +23,6 @@ import ops
 from overrides import override
 
 from benchmark.benchmark_charm import DPBenchmarkCharm
-from benchmark.constants import (
-    DPBenchmarkExecError,
-    DPBenchmarkExecStatus,
-    DPBenchmarkMissingOptionsError,
-)
 from opensearch_relation_manager import OpenSearchDatabaseRelationManager
 
 # Log messages can be retrieved using juju debug-log
@@ -65,7 +60,12 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
 
     @override
     def _on_install(self, event):
-        self._install_packages(["python3-pip", "python3-prometheus-client", "unzip"])
+        self._install_packages([
+            "python3-pip",
+            "python3-prometheus-client",
+            "unzip",
+            "python3-jinja2",
+        ])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")
@@ -77,7 +77,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
     @override
     def _execute_benchmark_cmd(self, extra_labels, command: str):
         """Execute the benchmark command."""
-        # There is no reson to execute any other command besides run for OSB.
+        # There is no reason to execute any other command besides run for OSB.
         pass
 
     def _generate_workload_params(self):
