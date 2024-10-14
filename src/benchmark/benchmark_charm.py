@@ -26,6 +26,7 @@ from benchmark.constants import (
     METRICS_PORT,
     PEER_RELATION,
     DatabaseRelationStatus,
+    DPBenchmarkError,
     DPBenchmarkExecError,
     DPBenchmarkExecStatus,
     DPBenchmarkIsInWrongStateError,
@@ -153,23 +154,34 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         return self.model.get_binding(COS_AGENT_RELATION).network.bind_address
 
     def _on_config_changed(self, event):
-        # First, we check if the status of the service
-        if not (status := self.benchmark_status.check()) or status == DPBenchmarkExecStatus.UNSET:
-            logger.debug("The config changed happened too early in the lifecycle, nothing to do")
+        """Config changed event."""
+        try:
+            # First, we check if the status of the service
+            if (
+                not (status := self.benchmark_status.check())
+                or status == DPBenchmarkExecStatus.UNSET
+            ):
+                logger.debug(
+                    "The config changed happened too early in the lifecycle, nothing to do"
+                )
+                return
+
+            if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
+                logger.debug("The benchmark is running, stopped or in error, stop it")
+                self.stop()
+
+            if status == DPBenchmarkExecStatus.PREPARED:
+                # We need to unset the service and rebuild the svc file
+                self.clean_up()
+                self.prepare()
+
+            # We must set the file, as we were not UNSET:
+            if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
+                self.run()
+        except DPBenchmarkError as e:
+            logger.error(f"Error in config changed: {e}")
+            event.defer()
             return
-
-        if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
-            logger.debug("The benchmark is running, stopped or in error, stop it")
-            self.stop()
-
-        if status == DPBenchmarkExecStatus.PREPARED:
-            # We need to unset the service and rebuild the svc file
-            self.clean_up()
-            self.prepare()
-
-        # We must set the file, as we were not UNSET:
-        if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
-            self.run()
 
     def _on_relation_broken(self, _):
         self.SERVICE_CLS().stop()
