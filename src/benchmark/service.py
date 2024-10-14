@@ -73,26 +73,29 @@ class DPBenchmarkService:
         self,
         db: DPBenchmarkExecutionModel,
         labels: Optional[str] = "",
-        extra_config: Optional[dict[str, str]] = {},
+        extra_config: str | None = None,
     ) -> bool:
         """Render the systemd service file."""
+        config = {
+            "target_hosts": ",".join(db.db_info.hosts)
+            if isinstance(db.db_info.hosts, list)
+            else db.db_info.hosts,
+            "workload": db.db_info.workload_name,
+            "threads": db.threads,
+            "clients": db.clients,
+            "db_user": db.db_info.username,
+            "db_password": db.db_info.password,
+            "duration": db.duration,
+            "workload_params": self.workload_parameter_path,
+            "extra_labels": labels,
+        }
+        if extra_config:
+            config["extra_config"] = extra_config
+
         _render(
             self.SVC_NAME + ".service.j2",
             self.svc_path,
-            {
-                "target_hosts": ",".join(db.db_info.hosts)
-                if isinstance(db.db_info.hosts, list)
-                else db.db_info.hosts,
-                "workload": db.db_info.workload_name,
-                "threads": db.threads,
-                "clients": db.clients,
-                "db_user": db.db_info.username,
-                "db_password": db.db_info.password,
-                "duration": db.duration,
-                "workload_params": self.workload_parameter_path,
-                "extra_labels": labels,
-            }
-            | extra_config,
+            config,
         )
         return daemon_reload()
 

@@ -60,6 +60,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
 
     @override
     def _on_install(self, event):
+        self.unit.status = ops.model.MaintenanceStatus("Installing...")
         self._install_packages([
             "python3-pip",
             "python3-prometheus-client",
@@ -70,8 +71,8 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")
         subprocess.check_output("pip3 install opensearch-benchmark".split())
 
-        # In this case, we want to first inst
-        super()._on_install(event)
+        self.SERVICE_CLS().render_service_executable()
+        self.unit.status = ops.model.ActiveStatus()
 
     @override
     def execute_benchmark_cmd(self, extra_labels, command: str):

@@ -292,7 +292,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             db=self.database.get_execution_options(),
             workload_name=self.config["workload_name"],
             labels=self.labels,
-            extra_config=self.database.get_execution_options().extra.extra_config,
+            extra_config=str(self.database.get_execution_options().extra),
         ):
             raise DPBenchmarkStatusError(DPBenchmarkExecStatus.ERROR)
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)

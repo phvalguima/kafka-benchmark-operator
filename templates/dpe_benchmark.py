@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 
 from prometheus_client import Gauge, start_http_server
 
@@ -27,8 +28,9 @@ class OSBService:
         kill_running_processes: bool = True,
         duration: int = 0,
         workload_params: str|None = None,
+        test_mode: bool = False,
     ):
-        self.results_file = f"/tmp/osb_results_{int(time.time())}.csv"
+        self.results_file = f"/tmp/osb_results_{int(time.time())}_{str(uuid.uuid4())[6:]}.csv"
 
         self.osb_args = f""" --workload {workload}
          --target-hosts {','.join(target_hosts)}
@@ -42,6 +44,10 @@ class OSBService:
 
         if workload_params:
             self.osb_args += f" --workload-params {workload_params}"
+
+        if test_mode:
+            self.osb_args += " --test-mode"
+
         self.duration = duration
 
     def cmd(self, runtype):
@@ -77,13 +83,6 @@ class OSBService:
             if proc.poll() is not None:
                 # Process has finished
                 break
-
-        # We are now finished.
-        # Check if the result files is present
-        if not os.path.exists(self.results_file):
-            # We will clean up the metrics and leave
-            metrics = {}
-            return
 
         # Open the files with results and start uploading that to prometheus.
         with open(self.results_file) as f:
@@ -125,16 +124,6 @@ def main(args):
         global keep_running
         keep_running = False  # noqa: F841
 
-    svc = OSBService(
-        target_hosts=args.target_hosts.split(","),
-        workload=args.workload,
-        db_user=args.db_user,
-        db_password=args.db_password,
-        kill_running_processes=True,
-        duration=args.duration,
-        workload_params=args.workload_params,
-    )
-
     signal.signal(signal.SIGINT, _exit)
     signal.signal(signal.SIGTERM, _exit)
     start_http_server(8088)
@@ -144,6 +133,17 @@ def main(args):
         finish_time = initial_time + args.duration
         metrics = {}
         while keep_running:
+            svc = OSBService(
+                target_hosts=args.target_hosts.split(","),
+                workload=args.workload,
+                db_user=args.db_user,
+                db_password=args.db_password,
+                kill_running_processes=True,
+                duration=args.duration,
+                workload_params=args.workload_params,
+                test_mode=args.test_mode,
+            )
+
             proc = subprocess.Popen(
                 svc.cmd("execute-test").split(),
                 stdin=subprocess.PIPE,
@@ -151,11 +151,6 @@ def main(args):
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
             )
-            if metrics:
-                # Keep the results for 10 minutes
-                time.sleep(600)
-                # Now, we reinitiate the metrics
-                metrics = {}
 
             svc.wait_and_process(proc, metrics, "osb", [] if not args.extra_labels else args.extra_labels.split(","))
 
@@ -183,6 +178,16 @@ def main(args):
             print(f"benchmark STDERR: {proc.stderr.read()}")
             raise Exception(f"benchmark failed with {proc.poll()}")
     elif args.command == "clean":
+        svc = OSBService(
+            target_hosts=args.target_hosts.split(","),
+            workload=args.workload,
+            db_user=args.db_user,
+            db_password=args.db_password,
+            kill_running_processes=True,
+            duration=args.duration,
+            workload_params=args.workload_params,
+            test_mode=args.test_mode,
+        )
         svc.clean()
     else:
         raise Exception(f"Command option {args.command} not known")
@@ -203,6 +208,9 @@ if __name__ == "__main__":
     parser.add_argument("--workload_params", type=str, default=None)
     parser.add_argument(
         "--extra_labels", type=str, help="comma-separated list of extra labels to be used.", default=""
+    )
+    parser.add_argument(
+        "--test_mode", action='store_true', help="Whether to run in test mode",
     )
 
     args = parser.parse_args()

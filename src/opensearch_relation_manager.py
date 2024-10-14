@@ -91,7 +91,7 @@ class OpenSearchDatabaseRelationManager(DatabaseRelationManager):
             unix_socket = endpoints[7:]
 
         return DPBenchmarkBaseDatabaseModel(
-            hosts=[f"https://{url}" for url in endpoints.split()],
+            hosts=[f"https://{url}" for url in endpoints.split(",")],
             unix_socket=unix_socket,
             username=self.relation_data.get("username"),
             password=self.relation_data.get("password"),
