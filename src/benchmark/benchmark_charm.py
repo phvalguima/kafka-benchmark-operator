@@ -292,7 +292,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             db=self.database.get_execution_options(),
             workload_name=self.config["workload_name"],
             labels=self.labels,
-            extra_config=self.database.get_execution_options().extra_config,
+            extra_config=self.database.get_execution_options().extra.extra_config,
         ):
             raise DPBenchmarkStatusError(DPBenchmarkExecStatus.ERROR)
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)
@@ -307,7 +307,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
                 f"Failed: app level reports {self.benchmark_status.app_status()} and service level reports {self.benchmark_status.service_status()}"
             )
         except DPBenchmarkStatusError as e:
-            event.fail(f"Failed: benchmark must not be in status {e.status}")
+            event.fail(f"Failed: benchmark must not be in status {e.status.value}")
         except DPBenchmarkServiceError as e:
             event.fail(f"Failed: error in benchmark service {e}")
 

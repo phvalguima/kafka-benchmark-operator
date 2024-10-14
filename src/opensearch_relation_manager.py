@@ -11,7 +11,11 @@ from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource
 from overrides import override
 
-from benchmark.constants import DPBenchmarkExecutionExtraConfigsModel, DPBenchmarkExecutionModel
+from benchmark.constants import (
+    DPBenchmarkBaseDatabaseModel,
+    DPBenchmarkExecutionExtraConfigsModel,
+    DPBenchmarkExecutionModel,
+)
 from benchmark.relation_manager import DatabaseRelationManager
 from models import (
     INDEX_NAME,
@@ -55,6 +59,7 @@ class OpenSearchDatabaseRelationManager(DatabaseRelationManager):
             charm,
             "opensearch",
             INDEX_NAME,
+            extra_user_roles="admin",
         )
         self._setup_relations(["opensearch"])
 
@@ -74,4 +79,23 @@ class OpenSearchDatabaseRelationManager(DatabaseRelationManager):
                 run_count=self.charm.config.get("run_count", 0),
                 test_mode=self.charm.config.get("test_mode", False),
             )
+        )
+
+    @override
+    def get_database_options(self) -> DPBenchmarkBaseDatabaseModel:
+        """Returns the database options."""
+        endpoints = self.relation_data.get("endpoints")
+
+        unix_socket = None
+        if endpoints.startswith("file://"):
+            unix_socket = endpoints[7:]
+
+        return DPBenchmarkBaseDatabaseModel(
+            hosts=[f"https://{url}" for url in endpoints.split()],
+            unix_socket=unix_socket,
+            username=self.relation_data.get("username"),
+            password=self.relation_data.get("password"),
+            db_name=self.relation_data.get(self.DATABASE_KEY),
+            workload_name=self.workload_name,
+            workload_params=self.workload_params,
         )

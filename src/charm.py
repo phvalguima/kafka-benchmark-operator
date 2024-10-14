@@ -64,7 +64,6 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
             "python3-pip",
             "python3-prometheus-client",
             "unzip",
-            "python3-jinja2",
         ])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):

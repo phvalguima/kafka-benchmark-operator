@@ -43,7 +43,6 @@ def test_on_install(harness):
             "python3-pip",
             "python3-prometheus-client",
             "unzip",
-            "python3-jinja2",
         ])
 
         mock_exists.assert_called_once_with("/usr/lib/python3.12/EXTERNALLY-MANAGED")

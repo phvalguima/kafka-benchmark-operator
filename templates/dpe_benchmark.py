@@ -41,7 +41,7 @@ class OSBService:
             self.osb_args += " --kill-running-processes"
 
         if workload_params:
-            self.osb_args += f" --workload_params {workload_params}"
+            self.osb_args += f" --workload-params {workload_params}"
         self.duration = duration
 
     def cmd(self, runtype):
