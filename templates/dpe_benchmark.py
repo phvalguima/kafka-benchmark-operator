@@ -26,7 +26,7 @@ class OSBService:
         *,
         kill_running_processes: bool = True,
         duration: int = 0,
-        workload_params: str|None = "./osb_benchmark.json",
+        workload_params: str|None = None,
     ):
         self.results_file = f"/tmp/osb_results_{int(time.time())}.csv"
 

@@ -50,7 +50,6 @@ def test_render_service_file(harness, mock_makedirs):
         )
 
         mock_daemon_reload.return_value = True
-
         result = service.render_service_file(db)
         assert result
         mock_render.assert_called_once_with(
@@ -64,9 +63,8 @@ def test_render_service_file(harness, mock_makedirs):
                 "db_user": "user",
                 "db_password": "pass",
                 "duration": 60,
-                "workload_params": {},
+                "workload_params": "/root/.benchmark/charmed_parameters/dpe_benchmark.json",
                 "extra_labels": "",
-                "extra_config": " ",
             },
         )
         mock_daemon_reload.assert_called_once()

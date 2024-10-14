@@ -285,12 +285,14 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             DPBenchmarkMultipleRelationsToDBError: If there are multiple relations to the database.
             DPBenchmarkExecError: If the benchmark execution fails.
         """
-        if not self.unit.is_leader():
+        if self.unit.is_leader():
             self.execute_benchmark_cmd(self.labels, "prepare")
 
         if not self.SERVICE_CLS().prepare(
             db=self.database.get_execution_options(),
             workload_name=self.config["workload_name"],
+            labels=self.labels,
+            extra_config=self.database.get_execution_options().extra_config,
         ):
             raise DPBenchmarkStatusError(DPBenchmarkExecStatus.ERROR)
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)

@@ -73,7 +73,7 @@ class DPBenchmarkService:
         self,
         db: DPBenchmarkExecutionModel,
         labels: Optional[str] = "",
-        extra_config: Optional[str] = "",
+        extra_config: Optional[dict[str, str]] = {},
     ) -> bool:
         """Render the systemd service file."""
         _render(
@@ -89,10 +89,10 @@ class DPBenchmarkService:
                 "db_user": db.db_info.username,
                 "db_password": db.db_info.password,
                 "duration": db.duration,
-                "workload_params": db.db_info.workload_params,
+                "workload_params": self.workload_parameter_path,
                 "extra_labels": labels,
-                "extra_config": str(db.extra) + " " + extra_config,
-            },
+            }
+            | extra_config,
         )
         return daemon_reload()
 
@@ -105,11 +105,7 @@ class DPBenchmarkService:
         _render(
             "src/workload_parameter_templates/" + workload_name + ".json.j2",
             self.workload_parameter_path,
-            {
-                "index_name": db.db_info.db_name,
-                "clients": db.clients,
-                "duration": db.duration,
-            },
+            db.db_info.workload_params,
         )
 
     def is_prepared(self) -> bool:
@@ -129,16 +125,16 @@ class DPBenchmarkService:
     ) -> bool:
         """Prepare the benchmark service."""
         try:
+            self.render_workload_parameters(
+                db=db,
+                workload_name=workload_name,
+            )
             if not self.render_service_file(
                 db=db,
                 labels=labels,
                 extra_config=extra_config,
             ):
                 return False
-            self.render_workload_parameters(
-                db=db,
-                workload_name=workload_name,
-            )
         except Exception:
             return False
         return True
