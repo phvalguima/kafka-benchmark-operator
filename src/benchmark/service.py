@@ -8,6 +8,7 @@ import shutil
 from typing import Any, Dict, Optional
 
 from charms.operator_libs_linux.v1.systemd import (
+    SystemdError,
     daemon_reload,
     service_failed,
     service_restart,
@@ -18,6 +19,8 @@ from jinja2 import Environment, FileSystemLoader, exceptions
 
 from .constants import (
     DPBenchmarkExecutionModel,
+    DPBenchmarkServiceError,
+    DPBenchmarkSystemdCommand,
 )
 
 
@@ -142,7 +145,7 @@ class DPBenchmarkService:
 
     def is_running(self) -> bool:
         """Checks if the benchmark service is running."""
-        return self.is_prepared() and service_running(self.SVC_NAME)
+        return self.is_prepared() and self._check_systemd(DPBenchmarkSystemdCommand.RUNNING)
 
     def is_stopped(self) -> bool:
         """Checks if the benchmark service has stopped."""
@@ -150,18 +153,37 @@ class DPBenchmarkService:
 
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""
-        return self.is_prepared() and service_failed(self.SVC_NAME)
+        return self.is_prepared() and self._check_systemd(DPBenchmarkSystemdCommand.FAILED)
+
+    def _check_systemd(self, cmd: DPBenchmarkSystemdCommand) -> bool:
+        """Check the systemd status.
+
+        This proxy method captures the external exception and re-raises as adequate for the benchmark.
+        """
+        try:
+            if cmd == DPBenchmarkSystemdCommand.RESTART:
+                return service_restart(self.SVC_NAME)
+            if cmd == DPBenchmarkSystemdCommand.STOP:
+                return service_stop(self.SVC_NAME)
+            if cmd == DPBenchmarkSystemdCommand.FAILED:
+                return service_failed(self.SVC_NAME)
+            if cmd == DPBenchmarkSystemdCommand.RUNNING:
+                return service_running(self.SVC_NAME)
+            if cmd == DPBenchmarkSystemdCommand.DAEMON_RELOAD:
+                return daemon_reload()
+        except SystemdError as e:
+            raise DPBenchmarkServiceError(e)
 
     def run(self) -> bool:
         """Run the benchmark service."""
         if self.is_stopped() or self.is_failed():
-            return service_restart(self.SVC_NAME)
+            return self._check_systemd(DPBenchmarkSystemdCommand.RESTART)
         return self.is_running()
 
     def stop(self) -> bool:
         """Stop the benchmark service."""
         if self.is_running():
-            return service_stop(self.SVC_NAME)
+            return self._check_systemd(DPBenchmarkSystemdCommand.STOP)
         return self.is_stopped()
 
     def unset(self) -> bool:

@@ -21,8 +21,24 @@ class DPBenchmarkError(Exception):
     """Benchmark error."""
 
 
+class DPBenchmarkUnitNotReadyError(DPBenchmarkError):
+    """Unit not ready error."""
+
+
+class DPBenchmarkStatusError(DPBenchmarkError):
+    """Unit not ready error."""
+
+    def __init__(self, status: str):
+        self.status = status
+        super().__init__(f"Status: {status}")
+
+
 class DPBenchmarkExecError(DPBenchmarkError):
     """Sysbench failed to execute a command."""
+
+
+class DPBenchmarkServiceError(DPBenchmarkExecError):
+    """Sysbench service error."""
 
 
 class DPBenchmarkMultipleRelationsToDBError(DPBenchmarkError):
@@ -72,6 +88,16 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
         if not field_values.get("hosts") and not field_values.get("unix_socket"):
             raise DPBenchmarkMissingOptionsError("Missing endpoint as unix_socket OR host:port")
         return field_values
+
+
+class DPBenchmarkSystemdCommand(Enum):
+    """Systemd command."""
+
+    RESTART = "restart"
+    STOP = "stop"
+    FAILED = "failed"
+    RUNNING = "is_running"
+    DAEMON_RELOAD = "daemon_reload"
 
 
 class DatabaseRelationStatus(Enum):

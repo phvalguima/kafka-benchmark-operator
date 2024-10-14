@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -14,13 +13,14 @@ This charm should also be the main entry point to all the modelling of your benc
 """
 
 import logging
-from abc import abstractmethod
 from typing import Dict, List
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0 import apt
+from overrides import override
 
+from benchmark.abs_benchmark_charm import DPBenchmarkCharmInterface
 from benchmark.constants import (
     COS_AGENT_RELATION,
     METRICS_PORT,
@@ -31,6 +31,9 @@ from benchmark.constants import (
     DPBenchmarkIsInWrongStateError,
     DPBenchmarkMissingOptionsError,
     DPBenchmarkMultipleRelationsToDBError,
+    DPBenchmarkServiceError,
+    DPBenchmarkStatusError,
+    DPBenchmarkUnitNotReadyError,
 )
 from benchmark.relation_manager import DatabaseRelationManager
 from benchmark.service import DPBenchmarkService
@@ -40,7 +43,7 @@ from benchmark.status import BenchmarkStatus
 logger = logging.getLogger(__name__)
 
 
-class DPBenchmarkCharm(ops.CharmBase):
+class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
     """The main benchmark class."""
 
     SERVICE_CLS = DPBenchmarkService
@@ -79,11 +82,13 @@ class DPBenchmarkCharm(ops.CharmBase):
             self.unit.status = ops.model.BlockedStatus("Unsupported workload")
             logger.error(f"Unsupported workload {self.config.get('workload_name', 'nyc_taxis')}")
             # Assert exception makes sense here
+            # Let the unit error out
             assert (
                 self.config.get("workload_name", "nyc_taxis") in self.list_supported_workloads()
             ), "Invalid workload name"
 
-    def _setup_db_relation(self, relation_names: List[str]):
+    @override
+    def setup_db_relation(self, relation_names: List[str]):
         """Setup the database relation."""
         self.database = DatabaseRelationManager(self, relation_names)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
@@ -95,6 +100,10 @@ class DPBenchmarkCharm(ops.CharmBase):
     def _set_status(self) -> None:
         """Recovers the benchmark status."""
         status = self.benchmark_status.check()
+        if not status:
+            self.unit.status = ops.model.WaitingStatus("Benchmark not ready")
+            return
+
         if status == DPBenchmarkExecStatus.ERROR:
             self.unit.status = ops.model.BlockedStatus("Benchmark failed, please check logs")
         elif status == DPBenchmarkExecStatus.UNSET:
@@ -143,16 +152,24 @@ class DPBenchmarkCharm(ops.CharmBase):
         """Current unit ip."""
         return self.model.get_binding(COS_AGENT_RELATION).network.bind_address
 
-    def _on_config_changed(self, _):
-        svc = self.SERVICE_CLS()
-        if svc.is_running():
-            svc.stop()
-            if not (options := self.database.get_execution_options()):
-                # Nothing to do, we can abandon this event and wait for the next changes
-                # Status will be handled at the end of the event
-                return
-            svc.render_service_file(options, labels=self.labels)
-            svc.run()
+    def _on_config_changed(self, event):
+        # First, we check if the status of the service
+        if not (status := self.benchmark_status.check()) or status == DPBenchmarkExecStatus.UNSET:
+            logger.debug("The config changed happened too early in the lifecycle, nothing to do")
+            return
+
+        if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
+            logger.debug("The benchmark is running, stopped or in error, stop it")
+            self.stop()
+
+        if status == DPBenchmarkExecStatus.PREPARED:
+            # We need to unset the service and rebuild the svc file
+            self.clean_up()
+            self.prepare()
+
+        # We must set the file, as we were not UNSET:
+        if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
+            self.run()
 
     def _on_relation_broken(self, _):
         self.SERVICE_CLS().stop()
@@ -236,43 +253,71 @@ class DPBenchmarkCharm(ops.CharmBase):
 
         self.unit.status = ops.model.MaintenanceStatus("Running prepare command...")
         try:
-            self._execute_benchmark_cmd(self.labels, "prepare")
+            self.prepare()
         except DPBenchmarkMultipleRelationsToDBError:
             event.fail("Failed: missing database options")
             return
         except DPBenchmarkExecError:
             event.fail("Failed: error in benchmark while executing prepare")
             return
+        except DPBenchmarkStatusError:
+            event.fail("Failed: missing database options")
+            return
+
+        event.set_results({"status": "prepared"})
+
+    def prepare(self):
+        """Prepares the database and sets the state.
+
+        Raises:
+            DPBenchmarkMultipleRelationsToDBError: If there are multiple relations to the database.
+            DPBenchmarkExecError: If the benchmark execution fails.
+        """
+        if not self.unit.is_leader():
+            self.execute_benchmark_cmd(self.labels, "prepare")
 
         if not self.SERVICE_CLS().prepare(
             db=self.database.get_execution_options(),
             workload_name=self.config["workload_name"],
         ):
-            event.fail("Failed: missing database options")
-
+            raise DPBenchmarkStatusError(DPBenchmarkExecStatus.ERROR)
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)
-        event.set_results({"status": "prepared"})
 
     def on_run_action(self, event):
         """Run benchmark action."""
-        if not (status := self.check()):
+        try:
+            self.run()
+            event.set_results({"status": "running"})
+        except DPBenchmarkUnitNotReadyError:
             event.fail(
                 f"Failed: app level reports {self.benchmark_status.app_status()} and service level reports {self.benchmark_status.service_status()}"
             )
-            return
+        except DPBenchmarkStatusError as e:
+            event.fail(f"Failed: benchmark must not be in status {e.status}")
+        except DPBenchmarkServiceError as e:
+            event.fail(f"Failed: error in benchmark service {e}")
+
+    def run(self):
+        """Run the benchmark service.
+
+        Raises:
+            DPBenchmarkServiceError: Returns an error if the service fails to start.
+            DPBenchmarkStatusError: Returns an error if the benchmark is not in the correct status.
+            DPEBenchmarkUnitNotReadyError: If the benchmark unit is not ready.
+        """
+        if not (status := self.check()):
+            raise DPBenchmarkUnitNotReadyError()
         if status == DPBenchmarkExecStatus.ERROR:
-            logger.warning("Overriding ERROR status and restarting service")
+            logger.debug("Overriding ERROR status and restarting service")
         elif status not in [
             DPBenchmarkExecStatus.PREPARED,
             DPBenchmarkExecStatus.STOPPED,
         ]:
-            event.fail("Failed: benchmark is not prepared")
-            return
+            raise DPBenchmarkStatusError(status)
 
         svc = self.SERVICE_CLS()
         svc.run()
         self.benchmark_status.set(DPBenchmarkExecStatus.RUNNING)
-        event.set_results({"status": "running"})
 
     def on_stop_action(self, event):
         """Stop benchmark service."""
@@ -281,49 +326,60 @@ class DPBenchmarkCharm(ops.CharmBase):
                 f"Failed: app level reports {self.benchmark_status.app_status()} and service level reports {self.benchmark_status.service_status()}"
             )
             return
-        if status != DPBenchmarkExecStatus.RUNNING:
-            event.fail("Failed: benchmark is not running")
+        if status not in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
+            event.set_results({"status": "benchmark was not running"})
             return
+        self.stop()
+        event.set_results({"status": "stopped"})
+
+    def stop(self):
+        """Stop the benchmark service.
+
+        Raises:
+            DPBenchmarkServiceError: Returns an error if the service fails to stop.
+        """
         svc = self.SERVICE_CLS()
         svc.stop()
         self.benchmark_status.set(DPBenchmarkExecStatus.STOPPED)
-        event.set_results({"status": "stopped"})
 
     def on_clean_action(self, event):
         """Clean the database."""
-        if not self.unit.is_leader():
-            event.fail("Failed: only leader can prepare the database")
-            return
-        if not (status := self.check()):
+        try:
+            self.clean_up()
+        except DPBenchmarkUnitNotReadyError:
             event.fail(
                 f"Failed: app level reports {self.benchmark_status.app_status()} and service level reports {self.benchmark_status.service_status()}"
             )
-            return
+        except DPBenchmarkMissingOptionsError:
+            event.fail("Failed: missing database options")
+        except DPBenchmarkExecError:
+            event.fail("Failed: error in benchmark while executing clean")
+        except DPBenchmarkServiceError as e:
+            event.fail(f"Failed: error in benchmark service {e}")
+
+    def clean_up(self):
+        """Clean up the database and the unit.
+
+        We recheck the service status, as we do notw ant to make any distinctions between the different steps.
+
+        Raises:
+            DPBenchmarkUnitNotReadyError: If the benchmark unit is not ready.
+            DPEBenchmarkMissingOptionsError: If the benchmark options are missing at execute_benchmark_cmd
+            DPBenchmarkExecError: If the benchmark execution fails at execute_benchmark_cmd.
+            DPBenchmarkServiceError: service related failures
+        """
+        if not (status := self.check()):
+            raise DPBenchmarkUnitNotReadyError()
+
         svc = self.SERVICE_CLS()
         if status == DPBenchmarkExecStatus.UNSET:
-            logger.warning("benchmark units are idle, but continuing anyways")
+            logger.debug("benchmark units are idle, but continuing anyways")
         if status == DPBenchmarkExecStatus.RUNNING:
             logger.info("benchmark service stopped in clean action")
             svc.stop()
 
         self.unit.status = ops.model.MaintenanceStatus("Cleaning up database")
-        try:
-            self._execute_benchmark_cmd(self.labels, "clean")
-        except DPBenchmarkMissingOptionsError:
-            event.fail("Failed: missing database options")
-            return
-        except DPBenchmarkExecError:
-            event.fail("Failed: error in benchmark while executing clean")
-            return
+        if self.unit.is_leader():
+            self.execute_benchmark_cmd(self.labels, "clean")
         svc.unset()
         self.benchmark_status.set(DPBenchmarkExecStatus.UNSET)
-
-    @abstractmethod
-    def _execute_benchmark_cmd(self, extra_labels, command: str):
-        """Execute the benchmark command."""
-        pass
-
-    @abstractmethod
-    def list_supported_workloads(self) -> list[str]:
-        """List the supported workloads."""
-        pass

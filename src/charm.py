@@ -37,7 +37,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.labels = ",".join([self.model.name, self.unit.name.replace("/", "-")])
-        self._setup_db_relation(["opensearch"])
+        self.setup_db_relation(["opensearch"])
 
     @override
     def list_supported_workloads(self) -> list[str]:
@@ -48,7 +48,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
         ]
 
     @override
-    def _setup_db_relation(self, relation_names: list[str]):
+    def setup_db_relation(self, relation_names: list[str]):
         """Setup the database relation."""
         self.database = OpenSearchDatabaseRelationManager(
             self,
@@ -75,7 +75,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
         super()._on_install(event)
 
     @override
-    def _execute_benchmark_cmd(self, extra_labels, command: str):
+    def execute_benchmark_cmd(self, extra_labels, command: str):
         """Execute the benchmark command."""
         # There is no reason to execute any other command besides run for OSB.
         pass
