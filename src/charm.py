@@ -61,6 +61,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
     @override
     def _on_install(self, event):
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
+        self._install_packages(["python3-pip", "python3-prometheus-client"])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")

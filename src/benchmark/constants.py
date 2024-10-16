@@ -68,7 +68,7 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
     workload_name: str
     workload_params: dict[str, str]
 
-    @root_validator()
+    @root_validator(pre=False, skip_on_failure=True)
     @classmethod
     def validate_if_missing_params(cls, field_values):
         """Validate if missing params."""
