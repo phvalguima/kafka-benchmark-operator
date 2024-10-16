@@ -26,3 +26,6 @@ parts:
       - libffi-dev
       - libssl-dev
       - pkg-config
+    stage-packages:
+      - python3-prometheus-client
+      - unzip

@@ -61,14 +61,15 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
     @override
     def _on_install(self, event):
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
-        self._install_packages([
-            "python3-pip",
-            "python3-prometheus-client",
-            "unzip",
-        ])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")
+        try:
+            # Most recent versions of opensearch-benchmark require a newer version of jinja2
+            # We make sure it is uninstalled before we can install OSB
+            subprocess.check_output("apt purge -y python3-jinja2".split())
+        except Exception:
+            pass
         subprocess.check_output("pip3 install opensearch-benchmark".split())
 
         self.SERVICE_CLS().render_service_executable()

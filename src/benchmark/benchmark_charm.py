@@ -170,10 +170,8 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
                 logger.debug("The benchmark is running, stopped or in error, stop it")
                 self.stop()
 
-            if status == DPBenchmarkExecStatus.PREPARED:
-                # We need to unset the service and rebuild the svc file
-                self.clean_up()
-                self.prepare()
+            self.clean_up()
+            self.prepare()
 
             # We must set the file, as we were not UNSET:
             if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
@@ -212,8 +210,6 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         No exceptions are captured as we need all the dependencies below to even start running.
         """
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
-        self._install_packages(["python3-prometheus-client", "python3-jinja2", "unzip"])
-
         self.SERVICE_CLS().render_service_executable()
         self.unit.status = ops.model.ActiveStatus()
 
