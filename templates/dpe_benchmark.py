@@ -85,17 +85,18 @@ class OSBService:
                 break
 
         # Open the files with results and start uploading that to prometheus.
-        with open(self.results_file) as f:
-            # First line is a header, ignore
-            f.readline()
+        if os.path.exists(self.results_file):
+            with open(self.results_file) as f:
+                # First line is a header, ignore
+                f.readline()
 
-            for line in f:
-                value = self._process_line(line.rstrip())
-                if not value or not value["value"]:
-                    continue
-                add_benchmark_metric(
-                    metrics, f"{label}_{value['title'].replace(' ', '_').lower()}", extra_labels, f"{value['title']} ({value['unit']})", value["value"]
-                )
+                for line in f:
+                    value = self._process_line(line.rstrip())
+                    if not value or not value["value"]:
+                        continue
+                    add_benchmark_metric(
+                        metrics, f"{label}_{value['title'].replace(' ', '_').lower()}", extra_labels, f"{value['title']} ({value['unit']})", value["value"]
+                    )
 
     def stop(self, proc):
         """Stop the service with SIGTERM."""
