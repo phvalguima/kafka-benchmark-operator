@@ -4,10 +4,9 @@
 
 from unittest.mock import MagicMock, patch
 
-from models import OpenSearchExecutionExtraConfigsModel
-
-from benchmark.constants import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
-from benchmark.service import DPBenchmarkService
+from benchmark.literals import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
+from benchmark.managers.service import DPBenchmarkService
+from literals import OpenSearchExecutionExtraConfigsModel
 
 
 def test_is_prepared(harness, mock_makedirs):
@@ -31,8 +30,8 @@ def test_render_service_executable(harness, mock_makedirs):
 
 def test_render_service_file(harness, mock_makedirs):
     with (
-        patch("benchmark.service._render") as mock_render,
-        patch("benchmark.service.daemon_reload") as mock_daemon_reload,
+        patch("benchmark.managers.service._render") as mock_render,
+        patch("benchmark.managers.service.daemon_reload") as mock_daemon_reload,
     ):
         service = DPBenchmarkService()
         db = DPBenchmarkExecutionModel(
@@ -74,7 +73,7 @@ def test_render_service_file(harness, mock_makedirs):
 def test_is_running(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.service.service_running") as mock_service_running,
+        patch("benchmark.managers.service.service_running") as mock_service_running,
     ):
         service = DPBenchmarkService()
         mock_exists.return_value = True
@@ -87,7 +86,7 @@ def test_is_running(harness, mock_makedirs):
 def test_is_failed(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.service.service_failed") as mock_service_failed,
+        patch("benchmark.managers.service.service_failed") as mock_service_failed,
     ):
         service = DPBenchmarkService()
         mock_exists.return_value = True
@@ -100,7 +99,7 @@ def test_is_failed(harness, mock_makedirs):
 def test_stop(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.service.service_stop") as mock_service_stop,
+        patch("benchmark.managers.service.service_stop") as mock_service_stop,
     ):
         service = DPBenchmarkService()
         mock_exists.return_value = True
@@ -113,7 +112,7 @@ def test_stop(harness, mock_makedirs):
 def test_run(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.service.service_restart") as mock_service_restart,
+        patch("benchmark.managers.service.service_restart") as mock_service_restart,
     ):
         service = DPBenchmarkService()
         mock_exists.return_value = True
@@ -126,9 +125,9 @@ def test_run(harness, mock_makedirs):
 def test_unset(harness, mock_makedirs):
     with (
         patch("os.remove") as mock_remove,
-        patch("benchmark.service.daemon_reload") as mock_daemon_reload,
-        patch("benchmark.service.service_stop") as mock_service_stop,
-        patch("benchmark.service.service_running") as mock_service_running,
+        patch("benchmark.managers.service.daemon_reload") as mock_daemon_reload,
+        patch("benchmark.managers.service.service_stop") as mock_service_stop,
+        patch("benchmark.managers.service.service_running") as mock_service_running,
     ):
         service = DPBenchmarkService()
         service.is_prepared = MagicMock(return_value=True)

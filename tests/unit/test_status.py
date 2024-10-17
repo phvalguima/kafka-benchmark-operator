@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from ops.testing import Harness
 
-from benchmark.constants import DPBenchmarkExecStatus
-from benchmark.service import DPBenchmarkService
-from benchmark.status import BenchmarkStatus
+from benchmark.core.state import BenchmarkState
+from benchmark.literals import DPBenchmarkExecStatus
+from benchmark.managers.service import DPBenchmarkService
 from charm import OpenSearchBenchmarkOperator
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def test_app_status(harness):
     relation_name = "opensearch"
     svc = MagicMock(DPBenchmarkService)
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     harness.add_relation(relation_name, "opensearch")
     relation = harness.model.get_relation(relation_name)
@@ -45,7 +45,7 @@ def test_unit_status(harness):
     relation_name = "opensearch"
     svc = MagicMock(DPBenchmarkService)
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     harness.add_relation(relation_name, "opensearch")
     relation = harness.model.get_relation(relation_name)
@@ -58,7 +58,7 @@ def test_set_status(harness):
     relation_name = "opensearch"
     svc = MagicMock(DPBenchmarkService)
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     harness.add_relation(relation_name, "opensearch")
     relation = harness.model.get_relation(relation_name)
@@ -72,7 +72,7 @@ def test_has_error_happened(harness):
     relation_name = "opensearch"
     svc = MagicMock(DPBenchmarkService)
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     harness.add_relation(relation_name, "opensearch")
     relation = harness.model.get_relation(relation_name)
@@ -90,7 +90,7 @@ def test_service_status(harness):
     svc.is_stopped.return_value = False
 
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     assert benchmark_status.service_status() == DPBenchmarkExecStatus.RUNNING
 
@@ -99,7 +99,7 @@ def test_check_status(harness):
     relation_name = "opensearch"
     svc = MagicMock(DPBenchmarkService)
     charm = harness.charm
-    benchmark_status = BenchmarkStatus(charm, relation_name, svc)
+    benchmark_status = BenchmarkState(charm, relation_name, svc)
 
     harness.add_relation(relation_name, "opensearch")
     relation = harness.model.get_relation(relation_name)

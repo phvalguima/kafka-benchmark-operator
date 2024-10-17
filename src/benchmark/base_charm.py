@@ -15,16 +15,17 @@ This charm should also be the main entry point to all the modelling of your benc
 """
 
 import logging
+import os
+from abc import abstractmethod
 from typing import Dict, List
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0 import apt
-from overrides import override
+from ops.framework import EventBase
 
-from benchmark.core.charm_interface import DPBenchmarkCharmInterface
 from benchmark.core.state import BenchmarkState
-from benchmark.events.base_db import DatabaseRelationManager
+from benchmark.events.db import DatabaseRelationHandler
 from benchmark.literals import (
     COS_AGENT_RELATION,
     METRICS_PORT,
@@ -40,17 +41,18 @@ from benchmark.literals import (
     DPBenchmarkStatusError,
     DPBenchmarkUnitNotReadyError,
 )
+from benchmark.managers.service import DPBenchmarkService
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
 
 
-class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
-    """The default benchmark class."""
+class DPBenchmarkCharmBase(ops.CharmBase):
+    """The base benchmark class."""
 
-    def __init__(self, *args):
+    def __init__(self, *args, db_relation_names: List[str] = None):
         super().__init__(*args)
-        self.service = self.DPBenchmarkService()
+        self.service = DPBenchmarkService()
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -79,37 +81,10 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         self.benchmark_status = BenchmarkState(self, PEER_RELATION, self.service)
         self.labels = f"{self.model.name},{self.unit.name}"
 
-    @override
-    def setup_db_relation(self, relation_names: List[str]):
-        """Setup the database relation."""
-        self.database = DatabaseRelationManager(self, relation_names)
+        self.database = DatabaseRelationHandler(self, db_relation_names)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
-    def _on_update_status(self, _):
-        """Update the status of the charm."""
-        self._set_status()
-
-    def _set_status(self) -> None:
-        """Recovers the benchmark status."""
-        status = self.benchmark_status.check()
-        if not status:
-            self.unit.status = ops.model.WaitingStatus("Benchmark not ready")
-            return
-
-        if status == DPBenchmarkExecStatus.ERROR:
-            self.unit.status = ops.model.BlockedStatus("Benchmark failed, please check logs")
-        elif status == DPBenchmarkExecStatus.UNSET:
-            self.unit.status = ops.model.ActiveStatus()
-        if status == DPBenchmarkExecStatus.PREPARED:
-            self.unit.status = ops.model.WaitingStatus(
-                "Benchmark is prepared: execute run to start"
-            )
-        if status == DPBenchmarkExecStatus.RUNNING:
-            self.unit.status = ops.model.ActiveStatus("Benchmark is running")
-        if status == DPBenchmarkExecStatus.STOPPED:
-            self.unit.status = ops.model.BlockedStatus("Benchmark is stopped after run")
-
-    def __del__(self):
+    def _on_update_status(self, event: EventBase) -> None:
         """Set status for the operator and finishes the service.
 
         First, we check if there are relations with any meaningful data. If not, then
@@ -134,11 +109,31 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             return
         self._set_status()
 
+    def _set_status(self) -> None:
+        """Recovers the benchmark status."""
+        status = self.benchmark_status.check()
+        if not status:
+            self.unit.status = ops.model.WaitingStatus("Benchmark not ready")
+            return
+
+        if status == DPBenchmarkExecStatus.ERROR:
+            self.unit.status = ops.model.BlockedStatus("Benchmark failed, please check logs")
+        elif status == DPBenchmarkExecStatus.UNSET:
+            self.unit.status = ops.model.ActiveStatus()
+        if status == DPBenchmarkExecStatus.PREPARED:
+            self.unit.status = ops.model.WaitingStatus(
+                "Benchmark is prepared: execute run to start"
+            )
+        if status == DPBenchmarkExecStatus.RUNNING:
+            self.unit.status = ops.model.ActiveStatus("Benchmark is running")
+        if status == DPBenchmarkExecStatus.STOPPED:
+            self.unit.status = ops.model.BlockedStatus("Benchmark is stopped after run")
+
     def _unit_ip(self) -> str:
         """Current unit ip."""
         return self.model.get_binding(PEER_RELATION).network.bind_address
 
-    def _on_config_changed(self, event):
+    def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
         # We need to narrow the options of workload_name to the supported ones
         if self.config.get("workload_name", "nyc_taxis") not in self.supported_workloads():
@@ -172,8 +167,8 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             event.defer()
             return
 
-    def _on_relation_broken(self, _):
-        self.service.stop()
+    def _on_relation_broken(self, event: EventBase) -> None:
+        self.stop()
 
     def scrape_config(self) -> List[Dict]:
         """Generate scrape config for the Patroni metrics endpoint."""
@@ -186,14 +181,14 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             }
         ]
 
-    def _install_packages(self, extra_packages: List[str] = []):
+    def _install_packages(self, extra_packages: List[str] = []) -> None:
         """Install the packages needed for the benchmark."""
         self.unit.status = ops.model.MaintenanceStatus("Installing apt packages...")
         apt.update()
         apt.add_package(extra_packages)
         self.unit.status = ops.model.ActiveStatus()
 
-    def _on_install(self, event):
+    def _on_install(self, event: EventBase) -> None:
         """Installs the basic packages and python dependencies.
 
         No exceptions are captured as we need all the dependencies below to even start running.
@@ -202,7 +197,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         self.service.render_service_executable()
         self.unit.status = ops.model.ActiveStatus()
 
-    def _on_peer_changed(self, _):
+    def _on_peer_changed(self, event: EventBase) -> None:
         """Peer relation changed."""
         if (
             not self.unit.is_leader()
@@ -213,7 +208,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             # We need to mark this unit as prepared so we can rerun the script later
             self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)
 
-    def check(self, event=None) -> DPBenchmarkExecStatus:
+    def check(self, event: EventBase | None = None) -> DPBenchmarkExecStatus:
         """Wraps the status check and catches the wrong state error for processing."""
         try:
             return self.benchmark_status.check()
@@ -224,11 +219,11 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
                 event.defer()
         return None
 
-    def on_list_workloads_action(self, event):
+    def on_list_workloads_action(self, event: EventBase) -> None:
         """Lists all possible workloads."""
         event.set_results({"workloads": self.supported_workloads()})
 
-    def on_prepare_action(self, event):
+    def on_prepare_action(self, event: EventBase) -> None:
         """Prepare the database.
 
         There are two steps: the actual prepare command and setting a target to inform the
@@ -263,7 +258,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
 
         event.set_results({"status": "prepared"})
 
-    def prepare(self):
+    def prepare(self) -> None:
         """Prepares the database and sets the state.
 
         Raises:
@@ -282,7 +277,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             raise DPBenchmarkStatusError(DPBenchmarkExecStatus.ERROR)
         self.benchmark_status.set(DPBenchmarkExecStatus.PREPARED)
 
-    def on_run_action(self, event):
+    def on_run_action(self, event: EventBase) -> None:
         """Run benchmark action."""
         try:
             self.run()
@@ -296,7 +291,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         except DPBenchmarkServiceError as e:
             event.fail(f"Failed: error in benchmark service {e}")
 
-    def run(self):
+    def run(self) -> None:
         """Run the benchmark service.
 
         Raises:
@@ -318,7 +313,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         svc.run()
         self.benchmark_status.set(DPBenchmarkExecStatus.RUNNING)
 
-    def on_stop_action(self, event):
+    def on_stop_action(self, event: EventBase) -> None:
         """Stop benchmark service."""
         if not (status := self.check()):
             event.fail(
@@ -331,17 +326,18 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         self.stop()
         event.set_results({"status": "stopped"})
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the benchmark service.
 
         Raises:
             DPBenchmarkServiceError: Returns an error if the service fails to stop.
         """
-        svc = self.service
-        svc.stop()
-        self.benchmark_status.set(DPBenchmarkExecStatus.STOPPED)
+        self.service.stop()
+        if self.model.relations.get(PEER_RELATION):
+            # There are some situations where we may be going away and then we will not see the relation databag anymore.
+            self.benchmark_status.set(DPBenchmarkExecStatus.STOPPED)
 
-    def on_clean_action(self, event):
+    def on_clean_action(self, event: EventBase) -> None:
         """Clean the database."""
         try:
             self.clean_up()
@@ -356,7 +352,7 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         except DPBenchmarkServiceError as e:
             event.fail(f"Failed: error in benchmark service {e}")
 
-    def clean_up(self):
+    def clean_up(self) -> None:
         """Clean up the database and the unit.
 
         We recheck the service status, as we do notw ant to make any distinctions between the different steps.
@@ -382,3 +378,15 @@ class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             self.execute_benchmark_cmd(self.labels, "clean")
         svc.unset()
         self.benchmark_status.set(DPBenchmarkExecStatus.UNSET)
+
+    def supported_workloads(self) -> list[str]:
+        """List the supported workloads."""
+        return [
+            ".".join(name.split(".")[:-2])
+            for name in os.listdir("src/workload_parameter_templates")
+        ]
+
+    @abstractmethod
+    def execute_benchmark_cmd(self, extra_labels: Dict[str, str], command: str):
+        """Execute the benchmark command."""
+        raise NotImplementedError("This method must be implemented by the inheriting class")

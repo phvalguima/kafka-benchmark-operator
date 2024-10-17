@@ -44,8 +44,6 @@ class DatabaseRelationHandler(Object):
     well as the current relation status.
     """
 
-    DATABASE_KEY = "database"
-
     on = DatabaseHandlerEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     def __init__(
@@ -57,6 +55,7 @@ class DatabaseRelationHandler(Object):
         workload_params: dict[str, str] = {},
     ):
         super().__init__(charm, None)
+        self.database_key = "database"
         self.charm = charm
         self.workload_name = workload_name
         self.workload_params = workload_params
@@ -98,7 +97,7 @@ class DatabaseRelationHandler(Object):
             unix_socket=unix_socket,
             username=self.relation_data.get("username"),
             password=self.relation_data.get("password"),
-            db_name=self.relation_data.get(self.DATABASE_KEY),
+            db_name=self.relation_data.get(self.database_key),
             workload_name=self.workload_name,
             workload_params=self.workload_params,
         )
@@ -118,7 +117,7 @@ class DatabaseRelationHandler(Object):
         """Whether the relation is active based on contained data."""
         return relation.data.get(relation.app, {}) != {}
 
-    def _on_endpoints_changed(self, _):
+    def _on_endpoints_changed(self, event: EventBase) -> None:
         """Handles the endpoints_changed event."""
         self.on.db_config_update.emit()
 

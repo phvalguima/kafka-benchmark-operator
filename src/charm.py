@@ -22,11 +22,11 @@ from typing import List, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
-from ops.charm import CharmBase
+from ops.charm import CharmBase, EventBase
 from overrides import override
 
-from benchmark.default_charm import DPBenchmarkCharm
-from benchmark.events.base_db import DatabaseRelationHandler
+from benchmark.base_charm import DPBenchmarkCharmBase
+from benchmark.events.db import DatabaseRelationHandler
 from benchmark.literals import (
     DPBenchmarkBaseDatabaseModel,
     DPBenchmarkExecutionExtraConfigsModel,
@@ -103,37 +103,25 @@ class OpenSearchDatabaseRelationManager(DatabaseRelationHandler):
         )
 
 
-class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
+class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
     """Charm the service."""
 
     def __init__(self, *args):
-        super().__init__(*args)
+        db_relation_names = ["opensearch"]
+        super().__init__(*args, db_relation_names=db_relation_names)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.labels = ",".join([self.model.name, self.unit.name.replace("/", "-")])
-        self.setup_db_relation(["opensearch"])
-
-    @override
-    def supported_workloads(self) -> list[str]:
-        """List the supported workloads."""
-        return [
-            ".".join(name.split(".")[:-2])
-            for name in os.listdir("src/workload_parameter_templates")
-        ]
-
-    @override
-    def setup_db_relation(self, relation_names: list[str]):
-        """Setup the database relation."""
         self.database = OpenSearchDatabaseRelationManager(
             self,
-            relation_names,
+            db_relation_names,
             workload_name=self.config["workload_name"],
             workload_params=self._generate_workload_params(),
         )
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     @override
-    def _on_install(self, event):
+    def _on_install(self, event: EventBase) -> None:
         super()._on_install(event)
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
         self._install_packages(["python3-pip", "python3-prometheus-client"])
@@ -148,7 +136,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
             pass
         subprocess.check_output("pip3 install opensearch-benchmark".split())
 
-        self.SERVICE_CLS().render_service_executable()
+        self.service.render_service_executable()
         self.unit.status = ops.model.ActiveStatus()
 
     @override

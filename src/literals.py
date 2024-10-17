@@ -5,7 +5,7 @@
 
 from enum import Enum
 
-from benchmark.constants import DPBenchmarkExecutionExtraConfigsModel
+from benchmark.literals import DPBenchmarkExecutionExtraConfigsModel
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
