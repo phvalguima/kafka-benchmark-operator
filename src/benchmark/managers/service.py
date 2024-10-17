@@ -195,3 +195,7 @@ class DPBenchmarkService:
         except Exception:
             return False
         return result
+
+    def exec(self, command: str, extra_labels: Dict[str, str] = {}) -> None:
+        """Executes a benchmark command."""
+        pass

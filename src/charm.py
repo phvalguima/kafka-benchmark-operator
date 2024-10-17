@@ -23,6 +23,7 @@ from typing import List, Optional
 import ops
 from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
 from ops.charm import CharmBase, EventBase
+from ops.model import ActiveStatus, MaintenanceStatus
 from overrides import override
 
 from benchmark.base_charm import DPBenchmarkCharmBase
@@ -123,7 +124,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
     @override
     def _on_install(self, event: EventBase) -> None:
         super()._on_install(event)
-        self.unit.status = ops.model.MaintenanceStatus("Installing...")
+        self.unit.status = MaintenanceStatus("Installing...")
         self._install_packages(["python3-pip", "python3-prometheus-client"])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
@@ -137,13 +138,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
         subprocess.check_output("pip3 install opensearch-benchmark".split())
 
         self.service.render_service_executable()
-        self.unit.status = ops.model.ActiveStatus()
-
-    @override
-    def execute_benchmark_cmd(self, extra_labels, command: str):
-        """Execute the benchmark command."""
-        # There is no reason to execute any other command besides run for OSB.
-        pass
+        self.unit.status = ActiveStatus()
 
     def _generate_workload_params(self):
         return {}
