@@ -4,9 +4,10 @@
 
 from unittest.mock import MagicMock, patch
 
+from models import OpenSearchExecutionExtraConfigsModel
+
 from benchmark.constants import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
 from benchmark.service import DPBenchmarkService
-from models import OpenSearchExecutionExtraConfigsModel
 
 
 def test_is_prepared(harness, mock_makedirs):

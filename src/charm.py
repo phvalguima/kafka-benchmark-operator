@@ -18,15 +18,89 @@ the user.
 import logging
 import os
 import subprocess
+from typing import List, Optional
 
 import ops
+from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
+from ops.charm import CharmBase
 from overrides import override
 
-from benchmark.benchmark_charm import DPBenchmarkCharm
-from opensearch_relation_manager import OpenSearchDatabaseRelationManager
+from benchmark.default_charm import DPBenchmarkCharm
+from benchmark.events.base_db import DatabaseRelationHandler
+from benchmark.literals import (
+    DPBenchmarkBaseDatabaseModel,
+    DPBenchmarkExecutionExtraConfigsModel,
+    DPBenchmarkExecutionModel,
+)
+from literals import INDEX_NAME, OpenSearchExecutionExtraConfigsModel
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
+
+
+class OpenSearchDatabaseRelationManager(DatabaseRelationHandler):
+    """Listens to all the DB-related events and react to them.
+
+    This class will provide the charm with the necessary data to connect to the DB as
+    well as the current relation status.
+    """
+
+    DATABASE_KEY = "index"
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        relation_names: List[str] | None,
+        *,
+        workload_name: str = None,
+        workload_params: dict[str, str] = {},
+    ):
+        super().__init__(
+            charm, ["opensearch"], workload_name=workload_name, workload_params=workload_params
+        )
+        self.relations["opensearch"] = OpenSearchRequires(
+            charm,
+            "opensearch",
+            INDEX_NAME,
+            extra_user_roles="admin",
+        )
+
+    @property
+    def relation_data(self):
+        """Returns the relation data."""
+        return list(self.relations["opensearch"].fetch_relation_data().values())[0]
+
+    @override
+    def get_execution_options(
+        self,
+        extra_config: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel(),
+    ) -> Optional[DPBenchmarkExecutionModel]:
+        """Returns the execution options."""
+        return super().get_execution_options(
+            extra_config=OpenSearchExecutionExtraConfigsModel(
+                run_count=self.charm.config.get("run_count", 0),
+                test_mode=self.charm.config.get("test_mode", False),
+            )
+        )
+
+    @override
+    def get_database_options(self) -> DPBenchmarkBaseDatabaseModel:
+        """Returns the database options."""
+        endpoints = self.relation_data.get("endpoints")
+
+        unix_socket = None
+        if endpoints.startswith("file://"):
+            unix_socket = endpoints[7:]
+
+        return DPBenchmarkBaseDatabaseModel(
+            hosts=[f"https://{url}" for url in endpoints.split(",")],
+            unix_socket=unix_socket,
+            username=self.relation_data.get("username"),
+            password=self.relation_data.get("password"),
+            db_name=self.relation_data.get(self.DATABASE_KEY),
+            workload_name=self.workload_name,
+            workload_params=self.workload_params,
+        )
 
 
 class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
@@ -40,7 +114,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
         self.setup_db_relation(["opensearch"])
 
     @override
-    def list_supported_workloads(self) -> list[str]:
+    def supported_workloads(self) -> list[str]:
         """List the supported workloads."""
         return [
             ".".join(name.split(".")[:-2])
@@ -60,6 +134,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharm):
 
     @override
     def _on_install(self, event):
+        super()._on_install(event)
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
         self._install_packages(["python3-pip", "python3-prometheus-client"])
 

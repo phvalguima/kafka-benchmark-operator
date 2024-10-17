@@ -17,7 +17,7 @@ from charms.operator_libs_linux.v1.systemd import (
 )
 from jinja2 import Environment, FileSystemLoader, exceptions
 
-from .constants import (
+from benchmark.literals import (
     DPBenchmarkExecutionModel,
     DPBenchmarkServiceError,
     DPBenchmarkSystemdCommand,

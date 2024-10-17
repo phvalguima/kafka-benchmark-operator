@@ -16,7 +16,7 @@ from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
 from ops.model import Relation
 
-from benchmark.constants import (
+from benchmark.literals import (
     DatabaseRelationStatus,
     DPBenchmarkBaseDatabaseModel,
     DPBenchmarkExecutionExtraConfigsModel,
@@ -31,13 +31,13 @@ class DatabaseConfigUpdateNeededEvent(EventBase):
     """informs the charm that we have an update in the DB config."""
 
 
-class DatabaseManagerEvents(CharmEvents):
+class DatabaseHandlerEvents(CharmEvents):
     """Events used by the Database Relation Manager to communicate with the charm."""
 
     db_config_update = EventSource(DatabaseConfigUpdateNeededEvent)
 
 
-class DatabaseRelationManager(Object):
+class DatabaseRelationHandler(Object):
     """Listens to all the DB-related events and react to them.
 
     This class will provide the charm with the necessary data to connect to the DB as
@@ -46,7 +46,7 @@ class DatabaseRelationManager(Object):
 
     DATABASE_KEY = "database"
 
-    on = DatabaseManagerEvents()  # pyright: ignore [reportGeneralTypeIssues]
+    on = DatabaseHandlerEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     def __init__(
         self,
@@ -61,8 +61,6 @@ class DatabaseRelationManager(Object):
         self.workload_name = workload_name
         self.workload_params = workload_params
         self.relations = {}
-
-    def _setup_relations(self, relation_names: List[str]):
         for rel in relation_names:
             self.framework.observe(self.charm.on[rel].relation_joined, self._on_endpoints_changed)
             self.framework.observe(self.charm.on[rel].relation_changed, self._on_endpoints_changed)

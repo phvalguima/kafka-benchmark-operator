@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
@@ -8,14 +7,15 @@ from typing import Any
 
 import ops
 
-from benchmark.constants import DPBenchmarkExecStatus, DPBenchmarkIsInWrongStateError
-from benchmark.service import DPBenchmarkService
+from benchmark.literals import DPBenchmarkExecStatus, DPBenchmarkIsInWrongStateError
+from benchmark.managers.service import DPBenchmarkService
 
 
-class BenchmarkStatus(ops.Object):
+class BenchmarkState(ops.Object):
     """Renders the benchmark status updates the relation databag."""
 
     def __init__(self, charm: ops.charm.CharmBase, relation: str, svc: DPBenchmarkService):
+        super().__init__(charm, relation)
         self.charm = charm
         self.svc = svc
         self.relation = relation

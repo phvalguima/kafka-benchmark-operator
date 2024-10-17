@@ -1,7 +1,9 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""This class implements the generic benchmark workflow.
+"""This class implements the default benchmark workflow.
+
+It is a functional charm that connects the benchmark service to the database and the grafana agent.
 
 The charm should inherit from this class and implement only the specifics for its own tool.
 
@@ -20,8 +22,10 @@ from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0 import apt
 from overrides import override
 
-from benchmark.abs_benchmark_charm import DPBenchmarkCharmInterface
-from benchmark.constants import (
+from benchmark.core.charm_interface import DPBenchmarkCharmInterface
+from benchmark.core.state import BenchmarkState
+from benchmark.events.base_db import DatabaseRelationManager
+from benchmark.literals import (
     COS_AGENT_RELATION,
     METRICS_PORT,
     PEER_RELATION,
@@ -36,21 +40,18 @@ from benchmark.constants import (
     DPBenchmarkStatusError,
     DPBenchmarkUnitNotReadyError,
 )
-from benchmark.relation_manager import DatabaseRelationManager
-from benchmark.service import DPBenchmarkService
-from benchmark.status import BenchmarkStatus
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
 
 
-class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
-    """The main benchmark class."""
-
-    SERVICE_CLS = DPBenchmarkService
+class DPDefaultBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
+    """The default benchmark class."""
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.service = self.DPBenchmarkService()
+
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.prepare_action, self.on_prepare_action)
@@ -75,18 +76,8 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             scrape_configs=self.scrape_config,
         )
         self.database = None
-        self.benchmark_status = BenchmarkStatus(self, PEER_RELATION, self.SERVICE_CLS())
-        self.labels = ",".join([self.model.name, self.unit.name])
-
-        # We need to narrow the options of workload_name to the supported ones
-        if self.config.get("workload_name", "nyc_taxis") not in self.list_supported_workloads():
-            self.unit.status = ops.model.BlockedStatus("Unsupported workload")
-            logger.error(f"Unsupported workload {self.config.get('workload_name', 'nyc_taxis')}")
-            # Assert exception makes sense here
-            # Let the unit error out
-            assert (
-                self.config.get("workload_name", "nyc_taxis") in self.list_supported_workloads()
-            ), "Invalid workload name"
+        self.benchmark_status = BenchmarkState(self, PEER_RELATION, self.service)
+        self.labels = f"{self.model.name},{self.unit.name}"
 
     @override
     def setup_db_relation(self, relation_names: List[str]):
@@ -143,18 +134,18 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             return
         self._set_status()
 
-    @property
-    def is_tls_enabled(self):
-        """Return tls status."""
-        return False
-
-    @property
     def _unit_ip(self) -> str:
         """Current unit ip."""
-        return self.model.get_binding(COS_AGENT_RELATION).network.bind_address
+        return self.model.get_binding(PEER_RELATION).network.bind_address
 
     def _on_config_changed(self, event):
         """Config changed event."""
+        # We need to narrow the options of workload_name to the supported ones
+        if self.config.get("workload_name", "nyc_taxis") not in self.supported_workloads():
+            self.unit.status = ops.model.BlockedStatus("Unsupported workload")
+            logger.error(f"Unsupported workload {self.config.get('workload_name', 'nyc_taxis')}")
+            return
+
         try:
             # First, we check if the status of the service
             if (
@@ -182,16 +173,16 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
             return
 
     def _on_relation_broken(self, _):
-        self.SERVICE_CLS().stop()
+        self.service.stop()
 
     def scrape_config(self) -> List[Dict]:
         """Generate scrape config for the Patroni metrics endpoint."""
         return [
             {
                 "metrics_path": "/metrics",
-                "static_configs": [{"targets": [f"{self._unit_ip}:{METRICS_PORT}"]}],
+                "static_configs": [{"targets": [f"{self._unit_ip()}:{METRICS_PORT}"]}],
                 "tls_config": {"insecure_skip_verify": True},
-                "scheme": "https" if self.is_tls_enabled else "http",
+                "scheme": "http",
             }
         ]
 
@@ -199,9 +190,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         """Install the packages needed for the benchmark."""
         self.unit.status = ops.model.MaintenanceStatus("Installing apt packages...")
         apt.update()
-        apt.add_package(extra_packages or [])
-        if extra_packages:
-            apt.add_package(extra_packages)
+        apt.add_package(extra_packages)
         self.unit.status = ops.model.ActiveStatus()
 
     def _on_install(self, event):
@@ -210,7 +199,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         No exceptions are captured as we need all the dependencies below to even start running.
         """
         self.unit.status = ops.model.MaintenanceStatus("Installing...")
-        self.SERVICE_CLS().render_service_executable()
+        self.service.render_service_executable()
         self.unit.status = ops.model.ActiveStatus()
 
     def _on_peer_changed(self, _):
@@ -237,7 +226,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
 
     def on_list_workloads_action(self, event):
         """Lists all possible workloads."""
-        event.set_results({"workloads": self.list_supported_workloads()})
+        event.set_results({"workloads": self.supported_workloads()})
 
     def on_prepare_action(self, event):
         """Prepare the database.
@@ -284,7 +273,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         if self.unit.is_leader():
             self.execute_benchmark_cmd(self.labels, "prepare")
 
-        if not self.SERVICE_CLS().prepare(
+        if not self.service.prepare(
             db=self.database.get_execution_options(),
             workload_name=self.config["workload_name"],
             labels=self.labels,
@@ -325,7 +314,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         ]:
             raise DPBenchmarkStatusError(status)
 
-        svc = self.SERVICE_CLS()
+        svc = self.service
         svc.run()
         self.benchmark_status.set(DPBenchmarkExecStatus.RUNNING)
 
@@ -348,7 +337,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         Raises:
             DPBenchmarkServiceError: Returns an error if the service fails to stop.
         """
-        svc = self.SERVICE_CLS()
+        svc = self.service
         svc.stop()
         self.benchmark_status.set(DPBenchmarkExecStatus.STOPPED)
 
@@ -381,7 +370,7 @@ class DPBenchmarkCharm(ops.CharmBase, DPBenchmarkCharmInterface):
         if not (status := self.check()):
             raise DPBenchmarkUnitNotReadyError()
 
-        svc = self.SERVICE_CLS()
+        svc = self.service
         if status == DPBenchmarkExecStatus.UNSET:
             logger.debug("benchmark units are idle, but continuing anyways")
         if status == DPBenchmarkExecStatus.RUNNING:

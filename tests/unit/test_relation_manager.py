@@ -5,6 +5,7 @@
 from unittest.mock import PropertyMock, patch
 
 import pytest
+from models import OpenSearchExecutionExtraConfigsModel
 from ops.testing import Harness
 
 from benchmark.relation_manager import (
@@ -13,7 +14,6 @@ from benchmark.relation_manager import (
     DPBenchmarkMultipleRelationsToDBError,
 )
 from charm import OpenSearchBenchmarkOperator
-from models import OpenSearchExecutionExtraConfigsModel
 
 
 @pytest.fixture

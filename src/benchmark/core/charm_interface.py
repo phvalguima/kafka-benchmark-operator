@@ -14,7 +14,7 @@ class DPBenchmarkCharmInterface(ABC):
     """
 
     @abstractmethod
-    def list_supported_workloads(self) -> list[str]:
+    def supported_workloads(self) -> list[str]:
         """List the supported workloads."""
         raise NotImplementedError
 
@@ -33,8 +33,7 @@ class DPBenchmarkCharmInterface(ABC):
         """Prepares the database and sets the state.
 
         Raises:
-            DPBenchmarkMultipleRelationsToDBError: If there are multiple relations to the database.
-            DPBenchmarkExecError: If the benchmark execution fails.
+            DPBenchmarkExecError
         """
         raise NotImplementedError
 
@@ -43,9 +42,7 @@ class DPBenchmarkCharmInterface(ABC):
         """Run the benchmark service.
 
         Raises:
-            DPBenchmarkServiceError: Returns an error if the service fails to start.
-            DPBenchmarkStatusError: Returns an error if the benchmark is not in the correct status.
-            DPEBenchmarkUnitNotReadyError: If the benchmark unit is not ready.
+            DPBenchmarkError
         """
         raise NotImplementedError
 
@@ -62,12 +59,9 @@ class DPBenchmarkCharmInterface(ABC):
     def clean_up(self):
         """Clean up the database and the unit.
 
-        We recheck the service status, as we do notw ant to make any distinctions between the different steps.
+        We recheck the service status, as we do not want to make any distinctions between the different steps.
 
         Raises:
-            DPBenchmarkUnitNotReadyError: If the benchmark unit is not ready.
-            DPEBenchmarkMissingOptionsError: If the benchmark options are missing at execute_benchmark_cmd
-            DPBenchmarkExecError: If the benchmark execution fails at execute_benchmark_cmd.
-            DPBenchmarkServiceError: service related failures
+            DPBenchmarkError
         """
         raise NotImplementedError
