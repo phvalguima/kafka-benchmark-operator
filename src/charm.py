@@ -119,23 +119,26 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
             workload_name=self.config["workload_name"],
             workload_params=self._generate_workload_params(),
         )
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.start, self._on_start)
+
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     @override
     def _on_install(self, event: EventBase) -> None:
         super()._on_install(event)
-        self.unit.status = MaintenanceStatus("Installing...")
+        self.unit.status = MaintenanceStatus("Installing packages...")
         self._install_packages(["python3-pip", "python3-prometheus-client"])
 
         if os.path.exists("/usr/lib/python3.12/EXTERNALLY-MANAGED"):
             os.remove("/usr/lib/python3.12/EXTERNALLY-MANAGED")
-        try:
-            # Most recent versions of opensearch-benchmark require a newer version of jinja2
-            # We make sure it is uninstalled before we can install OSB
-            subprocess.check_output("apt purge -y python3-jinja2".split())
-        except Exception:
-            pass
-        subprocess.check_output("pip3 install opensearch-benchmark".split())
+
+    def _on_start(self, event: EventBase) -> None:
+        """Start the service."""
+        # sudo guarantees we are installing this dependency system-wide instead of only
+        # for the charm. It also ensures we are not setting PYTHONPATH, given we have
+        # it set in the charm itself, coming from "./dispatch"
+        subprocess.run("sudo pip3 install opensearch-benchmark", shell=True)
 
         self.service.render_service_executable()
         self.unit.status = ActiveStatus()

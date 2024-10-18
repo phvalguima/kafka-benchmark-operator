@@ -21,6 +21,14 @@ parts:
     prime:
       - src/workload_parameter_templates
     build-packages:
+      # # Dependencies used to build opensearch-benchmark
+      # - cmake
+      # - ninja-build
+      # - autoconf
+      # - automake
+      # - libtool
+      # - libhdf5-dev
+      # originals
       - libffi-dev
       - libssl-dev
       - pkg-config
