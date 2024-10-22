@@ -3,13 +3,14 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-import os
 from enum import Enum
-from typing import Any, Optional
-
-from pydantic import BaseModel, root_validator
+from typing import Literal
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
+
+
+Substrates = Literal["vm", "k8s"]
+Scope = Literal["unit", "app"]
 
 
 METRICS_PORT = 8088
@@ -53,54 +54,7 @@ class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
 
 
-class DPBenchmarkBaseDatabaseModel(BaseModel):
-    """Benchmark database model.
-
-    Holds all the details of the sysbench database.
-    """
-
-    # List of host:port pairs to use for connecting to the database.
-    hosts: Optional[list[str]]
-    unix_socket: Optional[str]
-    username: str
-    password: str
-    db_name: str
-    workload_name: str
-    workload_params: dict[str, str]
-
-    @root_validator(pre=False, skip_on_failure=True)
-    @classmethod
-    def validate_if_missing_params(cls, field_values):
-        """Validate if missing params."""
-        missing_param = []
-        # Check if the required fields are present
-        for f in ["username", "password", "workload_name"]:
-            if f not in field_values or field_values[f] is None:
-                missing_param.append(f)
-        if missing_param:
-            raise DPBenchmarkMissingOptionsError(f"{missing_param}")
-        if os.path.exists(field_values.get("unix_socket") or ""):
-            field_values["hosts"] = ""
-        else:
-            field_values["unix_socket"] = ""
-
-        # Check if we have the correct endpoint
-        if not field_values.get("hosts") and not field_values.get("unix_socket"):
-            raise DPBenchmarkMissingOptionsError("Missing endpoint as unix_socket OR host:port")
-        return field_values
-
-
-class DPBenchmarkSystemdCommand(Enum):
-    """Systemd command."""
-
-    RESTART = "restart"
-    STOP = "stop"
-    FAILED = "failed"
-    RUNNING = "is_running"
-    DAEMON_RELOAD = "daemon_reload"
-
-
-class DatabaseRelationStatus(Enum):
+class DatabaseRelationState(Enum):
     """Represents the different status of the database relation.
 
     The ERROR in this case corresponds to the case, for example, more than one
@@ -113,37 +67,21 @@ class DatabaseRelationStatus(Enum):
     ERROR = "error"
 
 
-class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
-    """Holds all the details of the sysbench execution extra config.
+class BenchmarkServiceState(Enum):
+    """Benchmark service status representation.
 
-    This model defines a basic conversion to a string of extra options to be considered.
+    The status are:
+    * NOT_PRESENT: the service is not present
+    * AVAILABLE: the service is present and ready to be started
+    * RUNNING: the service is running
+    * FINISHED: the service has finished
+    * FAILED: the service has failed
     """
-
-    extra_config: dict[str, Any] = {}
-
-    def __str__(self):
-        """Returns a string of extra options to be considered."""
-        cfg = ""
-        for key, val in self.extra_config.items():
-            prefix = "--" if len(key) > 1 else "-"
-            if val is None:
-                cfg += f"{prefix}{key} "
-            else:
-                cfg += f"{prefix}{key}={val} "
-        return cfg
-
-
-class DPBenchmarkExecutionModel(BaseModel):
-    """Benchmark execution model.
-
-    Holds all the details of the sysbench execution.
-    """
-
-    threads: int
-    duration: int
-    clients: int
-    db_info: DPBenchmarkBaseDatabaseModel
-    extra: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel()
+    NOT_PRESENT = "not_present"
+    AVAILABLE = "available"
+    RUNNING = "running"
+    FINISHED = "finished"
+    FAILED = "failed"
 
 
 class DPBenchmarkExecStatus(Enum):

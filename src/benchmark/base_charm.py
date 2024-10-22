@@ -24,6 +24,7 @@ from charms.operator_libs_linux.v0 import apt
 from ops.framework import EventBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
+from benchmark.benchmark_workload_base import DPBenchmarkService
 from benchmark.core.state import BenchmarkState
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.literals import (
@@ -41,7 +42,6 @@ from benchmark.literals import (
     DPBenchmarkStatusError,
     DPBenchmarkUnitNotReadyError,
 )
-from benchmark.managers.service import DPBenchmarkService
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)

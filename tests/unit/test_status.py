@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from ops.testing import Harness
 
+from benchmark.benchmark_workload_base import DPBenchmarkService
 from benchmark.core.state import BenchmarkState
 from benchmark.literals import DPBenchmarkExecStatus
-from benchmark.managers.service import DPBenchmarkService
 from charm import OpenSearchBenchmarkOperator
 
 logger = logging.getLogger(__name__)

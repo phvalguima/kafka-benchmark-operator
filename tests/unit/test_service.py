@@ -4,8 +4,8 @@
 
 from unittest.mock import MagicMock, patch
 
+from benchmark.benchmark_workload_base import DPBenchmarkService
 from benchmark.literals import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
-from benchmark.managers.service import DPBenchmarkService
 from literals import OpenSearchExecutionExtraConfigsModel
 
 

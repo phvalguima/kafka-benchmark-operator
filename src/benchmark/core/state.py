@@ -7,8 +7,8 @@ from typing import Any
 
 import ops
 
+from benchmark.benchmark_workload_base import DPBenchmarkService
 from benchmark.literals import DPBenchmarkExecStatus, DPBenchmarkIsInWrongStateError
-from benchmark.managers.service import DPBenchmarkService
 
 
 class BenchmarkState(ops.Object):
