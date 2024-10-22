@@ -71,13 +71,13 @@ class DPBenchmarkSystemdService(WorkloadBase):
     @override
     def restart(self) -> bool:
         """Restarts the benchmark service."""
-        return service_restart(self.paths.service)
+        return service_restart(self.paths.svc_name)
 
     @override
     def stop(self) -> bool:
         """Stop the benchmark service."""
         if self.is_running():
-            return service_stop(self.paths.service)
+            return service_stop(self.paths.svc_name)
         return self.is_stopped()
 
     @override
@@ -118,11 +118,11 @@ class DPBenchmarkSystemdService(WorkloadBase):
 
         This proxy method captures the external exception and re-raises as adequate for the benchmark.
         """
-        if not self.paths.exists(self.paths.service):
+        if not self.paths.exists(self.paths.svc_name):
             return BenchmarkServiceState.NOT_PRESENT
-        if service_failed(self.paths.service):
+        if service_failed(self.paths.svc_name):
             return BenchmarkServiceState.FAILED
-        if service_running(self.paths.service):
+        if service_running(self.paths.svc_name):
             return BenchmarkServiceState.RUNNING
         return BenchmarkServiceState.AVAILABLE
 
