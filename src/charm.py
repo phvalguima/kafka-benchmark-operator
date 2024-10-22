@@ -22,6 +22,9 @@ from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
+from charms.operator_libs_linux.v1.systemd import (
+    daemon_reload,
+)
 from ops.charm import CharmBase, EventBase
 from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, Relation, Unit
 from overrides import override
@@ -70,6 +73,43 @@ class OpenSearchConfigManager(ConfigManager):
                 test_mode=self.config.get("test_mode", False),
             )
         )
+
+    @override
+    def render_service_file(
+        self,
+        labels: Optional[str] = "",
+        extra_config: str | None = None,
+    ) -> bool:
+        """Render the systemd service file."""
+        if not (db := self.get_execution_options()):
+            return False
+        config = {
+            "target_hosts": ",".join(db.db_info.hosts)
+            if isinstance(db.db_info.hosts, list)
+            else db.db_info.hosts,
+            "workload": db.workload_name,
+            "threads": db.threads,
+            "clients": db.clients,
+            "db_user": db.db_info.username,
+            "db_password": db.db_info.password,
+            "duration": db.duration,
+            "workload_params": self.workload.paths.workload_parameters,
+            "extra_labels": labels,
+        }
+        if extra_config:
+            config["extra_config"] = ""
+            for key, val in extra_config.items():
+                prefix = "--" if len(key) > 1 else "-"
+                if val is None:
+                    config["extra_config"] += f" {prefix}{key}"
+                else:
+                    config["extra_config"] += f" {prefix}{key}={val}"
+        self._render(
+            self.workload.paths.svc_name + ".service.j2",
+            config,
+            dst_filepath=self.workload.paths.service,
+        )
+        return daemon_reload()
 
 
 class OpenSearchDatabaseState(DatabaseState):

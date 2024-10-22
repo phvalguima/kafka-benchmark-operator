@@ -31,7 +31,7 @@ def test_render_service_executable(harness, mock_makedirs):
 def test_render_service_file(harness, mock_makedirs):
     with (
         patch("benchmark.managers.config.ConfigManager._render") as mock_render,
-        patch("benchmark.managers.config.daemon_reload") as mock_daemon_reload,
+        patch("charm.daemon_reload") as mock_daemon_reload,
     ):
         db = DPBenchmarkExecutionModel(
             db_info=DPBenchmarkBaseDatabaseModel(

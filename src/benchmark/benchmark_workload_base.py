@@ -118,7 +118,7 @@ class DPBenchmarkSystemdService(WorkloadBase):
 
         This proxy method captures the external exception and re-raises as adequate for the benchmark.
         """
-        if not self.paths.exists(self.paths.svc_name):
+        if not self.paths.exists(self.paths.service):
             return BenchmarkServiceState.NOT_PRESENT
         if service_failed(self.paths.svc_name):
             return BenchmarkServiceState.FAILED
