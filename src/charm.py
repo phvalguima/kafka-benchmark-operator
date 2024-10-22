@@ -18,24 +18,23 @@ the user.
 import logging
 import os
 import subprocess
-from typing import Optional, Any
+from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
 from ops.charm import CharmBase, EventBase
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, Relation, Unit
 from overrides import override
 
 from benchmark.base_charm import DPBenchmarkCharmBase
+from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
 from benchmark.core.models import (
-    DPBenchmarkBaseDatabaseModel,
+    DatabaseState,
     DPBenchmarkExecutionExtraConfigsModel,
     DPBenchmarkExecutionModel,
 )
-from benchmark.managers.config import ConfigManager
-from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
-from benchmark.core.models import DatabaseState
 from benchmark.events.db import DatabaseRelationHandler
+from benchmark.managers.config import ConfigManager
 from literals import INDEX_NAME, OpenSearchExecutionExtraConfigsModel
 
 # Log messages can be retrieved using juju debug-log
@@ -58,15 +57,27 @@ class OpenSearchConfigManager(ConfigManager):
     @override
     def get_execution_options(
         self,
-        extra_config: DPBenchmarkExecutionExtraConfigsModel|None = None,
+        extra_config: DPBenchmarkExecutionExtraConfigsModel | None = None,
     ) -> Optional[DPBenchmarkExecutionModel]:
         """Returns the execution options."""
         return super().get_execution_options(
-            extra_config=extra_config or OpenSearchExecutionExtraConfigsModel(
+            extra_config=extra_config
+            or OpenSearchExecutionExtraConfigsModel(
                 run_count=self.config.get("run_count", 0),
                 test_mode=self.config.get("test_mode", False),
             )
         )
+
+
+class OpenSearchDatabaseState(DatabaseState):
+    """State collection for the database relation."""
+
+    def __init__(self, component: Application | Unit, relation: Relation):
+        super().__init__(
+            component=component,
+            relation=relation,
+        )
+        self.database_key = "index"
 
 
 class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
@@ -84,17 +95,17 @@ class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
         relation_name: str,
     ):
         super().__init__(charm, relation_name)
-        self.relations["opensearch"] = OpenSearchRequires(
-            charm,
+        self.state = OpenSearchDatabaseState(self.charm.app, self.relation)
+
+    @property
+    def client(self) -> Any:
+        """Returns the data_interfaces client corresponding to the database."""
+        return OpenSearchRequires(
+            self.charm,
             "opensearch",
             INDEX_NAME,
             extra_user_roles="admin",
         )
-
-    @property
-    def relation_data(self):
-        """Returns the relation data."""
-        return list(self.relations["opensearch"].fetch_relation_data().values())[0]
 
 
 class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
@@ -102,13 +113,14 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
 
     def __init__(self, *args):
         super().__init__(*args, db_relation_name="opensearch")
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.labels = ",".join([self.model.name, self.unit.name.replace("/", "-")])
         self.database = OpenSearchDatabaseRelationHandler(
             self,
             "opensearch",
         )
+
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
@@ -129,7 +141,7 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
         # it set in the charm itself, coming from "./dispatch"
         subprocess.run("sudo pip3 install opensearch-benchmark", shell=True)
 
-        self.service.render_service_executable()
+        self.config_manager.render_service_executable()
         self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: EventBase) -> None:

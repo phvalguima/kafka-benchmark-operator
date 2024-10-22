@@ -9,6 +9,7 @@ as changes in the configuration.
 """
 
 import logging
+from typing import Any
 
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
@@ -48,20 +49,26 @@ class DatabaseRelationHandler(Object):
         self.database_key = "database"
         self.charm = charm
         self.relation = self.charm.model.get_relation(relation_name)
-        self.state = DatabaseState()
+        self.state = DatabaseState(self.charm.app, self.relation)
+        self.relation_name = relation_name
 
         self.framework.observe(
-            self.charm.on[self.relation].relation_joined,
+            self.charm.on[self.relation_name].relation_joined,
             self._on_endpoints_changed,
         )
         self.framework.observe(
-            self.charm.on[self.relation].relation_changed, self._on_endpoints_changed
+            self.charm.on[self.relation_name].relation_changed, self._on_endpoints_changed
         )
         self.framework.observe(
-            self.charm.on[self.relation].relation_broken, self._on_endpoints_changed
+            self.charm.on[self.relation_name].relation_broken, self._on_endpoints_changed
         )
 
     def _on_endpoints_changed(self, event: EventBase) -> None:
         """Handles the endpoints_changed event."""
         if self.state.get():
             self.on.db_config_update.emit()
+
+    @property
+    def client(self) -> Any:
+        """Returns the data_interfaces client corresponding to the database."""
+        ...

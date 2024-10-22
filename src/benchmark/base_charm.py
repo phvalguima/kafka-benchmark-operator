@@ -68,7 +68,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             scrape_configs=self.scrape_config,
         )
         self.database = DatabaseRelationHandler(self, db_relation_name)
-        self.workload = DPBenchmarkSystemdService(self.database.get_execution_options())
+        self.workload = DPBenchmarkSystemdService()
         self.config_manager = ConfigManager(
             workload=self.workload,
             database=self.database.state,
@@ -101,7 +101,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             self.unit.status = BlockedStatus("Benchmark failed, please check logs")
         elif self.workload.is_running():
             self.unit.status = ActiveStatus("Benchmark is running")
-        elif self.workload.is_prepared():
+        elif self.workload.is_prepared() and self.peer_state.is_prepared():
             self.unit.status = WaitingStatus("Benchmark is prepared: execute run to start")
         elif self.workload.is_stopped():
             self.unit.status = BlockedStatus("Benchmark is stopped after run")
@@ -165,7 +165,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
         No exceptions are captured as we need all the dependencies below to even start running.
         """
         self.unit.status = MaintenanceStatus("Installing...")
-        self.service.render_service_executable()
+        self.config_manager.render_service_executable()
         self.unit.status = ActiveStatus()
 
     def on_list_workloads_action(self, event: EventBase) -> None:
@@ -248,7 +248,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             DPBenchmarkExecStatus.STOPPED,
         ]:
             raise DPBenchmarkStatusError(status)
-        self.service.run()
+        self.workload.run()
         self.benchmark_state.set(DPBenchmarkExecStatus.RUNNING)
 
     def on_stop_action(self, event: EventBase) -> None:
@@ -281,7 +281,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
 
         if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
             logger.debug("The benchmark is running, stopped or in error, stop it")
-            self.service.stop()
+            self.workload.stop()
         else:
             logger.debug("Service is already stopped.")
 
@@ -313,14 +313,14 @@ class DPBenchmarkCharmBase(ops.CharmBase):
 
         Raises:
             DPBenchmarkUnitNotReadyError: If the benchmark unit is not ready.
-            DPEBenchmarkMissingOptionsError: If the benchmark options are missing at self.service.exec
-            DPBenchmarkExecError: If the benchmark execution fails at self.service.exec.
+            DPEBenchmarkMissingOptionsError: If the benchmark options are missing at self.workload.exec
+            DPBenchmarkExecError: If the benchmark execution fails at self.workload.exec.
             DPBenchmarkServiceError: service related failures
         """
         if not (status := self.check()):
             raise DPBenchmarkUnitNotReadyError()
 
-        svc = self.service
+        svc = self.workload
         if status == DPBenchmarkExecStatus.UNSET:
             logger.debug("benchmark units are idle, but continuing anyways")
         if status in [DPBenchmarkExecStatus.RUNNING, DPBenchmarkExecStatus.ERROR]:
@@ -328,7 +328,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             svc.stop()
 
         if self.unit.is_leader():
-            self.service.exec("clean", self.labels)
+            self.workload.exec("clean", self.labels)
         svc.unset()
         self.benchmark_state.set(DPBenchmarkExecStatus.UNSET)
         return True

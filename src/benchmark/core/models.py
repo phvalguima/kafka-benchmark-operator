@@ -13,11 +13,10 @@ from typing import Any, Optional
 
 from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
-from ops.model import Relation
+from ops.model import Application, Relation, Unit
 from pydantic import BaseModel, root_validator
 
 from benchmark.literals import (
-    DatabaseRelationStatus,
     DPBenchmarkMissingOptionsError,
     Scope,
     Substrate,
@@ -70,8 +69,6 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
     username: str
     password: str
     db_name: str
-    workload_name: str
-    workload_params: dict[str, str]
 
     @root_validator(pre=False, skip_on_failure=True)
     @classmethod
@@ -79,7 +76,7 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
         """Validate if missing params."""
         missing_param = []
         # Check if the required fields are present
-        for f in ["username", "password", "workload_name"]:
+        for f in ["username", "password"]:
             if f not in field_values or field_values[f] is None:
                 missing_param.append(f)
         if missing_param:
@@ -101,6 +98,8 @@ class DPBenchmarkExecutionModel(BaseModel):
     duration: int
     clients: int
     db_info: DPBenchmarkBaseDatabaseModel
+    workload_name: str
+    workload_params: dict[str, str]
     extra: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel()
 
 
@@ -109,8 +108,8 @@ class RelationState:
 
     def __init__(
         self,
+        component: Application | Unit,
         relation: Relation | None,
-        component: Scope | None,
         substrate: Substrate | None = Substrate.VM,
         scope: Scope = Scope.UNIT,
     ):
@@ -118,7 +117,18 @@ class RelationState:
         self.substrate = substrate
         self.component = component
         self.scope = scope
-        self.relation_data = self.relation.data[self.scope]
+
+    @property
+    def relation_data(self) -> dict[str, str]:
+        """Returns the relation data."""
+        return self.relation.data[self.component]
+
+    @property
+    def remote_data(self) -> dict[str, str]:
+        """Returns the remote relation data."""
+        if self.scope == Scope.APP:
+            return self.relation.data[self.relation.app]
+        return self.relation.data[self.relation.unit]
 
     def __bool__(self) -> bool:
         """Boolean evaluation based on the existence of self.relation."""
@@ -127,7 +137,7 @@ class RelationState:
         except AttributeError:
             return False
 
-    def get(self) -> DatabaseRelationStatus:
+    def get(self) -> Any:
         """Returns the value of the key."""
         ...
 
@@ -142,22 +152,52 @@ class RelationState:
             del self.relation_data[field]
 
 
+class PeerState(RelationState):
+    """State collection for the database relation.
+
+    The following items are managed by this state:
+    * is_prepared: bool
+      used to define if the database has been loaded with any warmup data.
+      It must be true before starting the benchmark.
+    """
+
+    def __init__(self, component: Application | Unit, relation: Relation | None):
+        super().__init__(
+            relation=relation,
+            component=component,
+            scope=Scope.UNIT,
+        )
+
+    @property
+    def is_prepared(self) -> bool:
+        """Returns the value of the key."""
+        return self.relation_data.get("is_prepared", "false") == "true"
+
+    @is_prepared.setter
+    def is_prepared(self, prepared: bool):
+        """Returns the value of the key."""
+        if prepared:
+            self.set({"is_prepared": "true"})
+        else:
+            self.set({"is_prepared": None})
+
+
 class DatabaseState(RelationState):
     """State collection for the database relation."""
 
-    def __init__(self, relation_name: str, relation: Relation):
+    def __init__(self, component: Application | Unit, relation: Relation | None):
         self.database_key = "database"
         super().__init__(
-            relation=Relation if self.charm.model.relations[relation_name] else None,
-            component=None,
-            scope=Scope.UNIT,
+            relation=relation,
+            component=component,
+            scope=Scope.APP,
         )
 
     def get(self) -> DPBenchmarkBaseDatabaseModel | None:
         """Returns the value of the key."""
-        if len(self.relation) == 0:
+        if not self.relation:
             return None
-        endpoints = self.relation_data.get("endpoints")
+        endpoints = self.remote_data.get("endpoints")
 
         unix_socket = None
         if endpoints.startswith("file://"):
@@ -166,13 +206,7 @@ class DatabaseState(RelationState):
         return DPBenchmarkBaseDatabaseModel(
             hosts=endpoints.split(),
             unix_socket=unix_socket,
-            username=self.relation_data.get("username"),
-            password=self.relation_data.get("password"),
-            db_name=self.relation_data.get(self.database_key),
-            workload_name=self.workload_name,
-            workload_params=self.workload_params,
+            username=self.remote_data.get("username"),
+            password=self.remote_data.get("password"),
+            db_name=self.remote_data.get(self.database_key),
         )
-
-    def set(self, items: dict[str, str]) -> None:
-        """Writes to relation_data."""
-        super().set(items)

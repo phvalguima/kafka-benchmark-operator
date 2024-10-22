@@ -5,7 +5,6 @@
 
 from abc import ABC, abstractmethod
 
-from benchmark.core.models import DPBenchmarkExecutionModel
 from benchmark.literals import BenchmarkServiceState
 
 
@@ -47,9 +46,6 @@ class WorkloadBase(ABC):
 
     paths: WorkloadTemplatePaths
 
-    def __init__(self, db: DPBenchmarkExecutionModel):
-        self.db = db
-
     def start(self) -> bool:
         """Starts the workload service."""
         self.restart(self.paths.service)
@@ -57,11 +53,6 @@ class WorkloadBase(ABC):
     @abstractmethod
     def stop(self) -> bool:
         """Stops the workload service."""
-        ...
-
-    @abstractmethod
-    def unset(self) -> bool:
-        """Unset the benchmark service."""
         ...
 
     @abstractmethod

@@ -17,7 +17,6 @@ from charms.operator_libs_linux.v1.systemd import (
 )
 from overrides import override
 
-from benchmark.core.models import DPBenchmarkExecutionModel
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.literals import (
     BenchmarkServiceState,
@@ -65,8 +64,8 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
 class DPBenchmarkSystemdService(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
 
-    def __init__(self, db: DPBenchmarkExecutionModel):
-        super().__init__(db)
+    def __init__(self):
+        super().__init__()
         self.paths = DPBenchmarkSystemdTemplatePaths()
 
     @override
