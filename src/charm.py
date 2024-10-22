@@ -25,15 +25,18 @@ from charms.data_platform_libs.v0.data_interfaces import OpenSearchRequires
 from ops.charm import CharmBase, EventBase
 from ops.model import ActiveStatus, Application, BlockedStatus, MaintenanceStatus, Relation, Unit
 from overrides import override
+from pydantic import error_wrappers
 
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
 from benchmark.core.models import (
     DatabaseState,
+    DPBenchmarkBaseDatabaseModel,
     DPBenchmarkExecutionExtraConfigsModel,
     DPBenchmarkExecutionModel,
 )
 from benchmark.events.db import DatabaseRelationHandler
+from benchmark.literals import DPBenchmarkMissingOptionsError
 from benchmark.managers.config import ConfigManager
 from literals import INDEX_NAME, OpenSearchExecutionExtraConfigsModel
 
@@ -87,6 +90,29 @@ class OpenSearchDatabaseState(DatabaseState):
     def remote_data(self) -> dict[str, str]:
         """Returns the relation data."""
         return list(self.client.fetch_relation_data().values())[0]
+
+    @override
+    def get(self) -> DPBenchmarkBaseDatabaseModel | None:
+        """Returns the value of the key."""
+        if not self.relation or not (endpoints := self.remote_data.get("endpoints")):
+            return None
+
+        unix_socket = None
+        if endpoints.startswith("file://"):
+            unix_socket = endpoints[7:]
+        try:
+            return DPBenchmarkBaseDatabaseModel(
+                hosts=[f"https://{ep}" for ep in endpoints.split()],
+                unix_socket=unix_socket,
+                username=self.remote_data.get("username"),
+                password=self.remote_data.get("password"),
+                db_name=self.remote_data.get(self.database_key),
+            )
+        except error_wrappers.ValidationError as e:
+            logger.warning(f"Failed to validate the database model: {e}")
+            entries = [entry.get("loc")[0] for entry in e.errors()]
+            raise DPBenchmarkMissingOptionsError(f"{entries}")
+        return None
 
 
 class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):

@@ -53,5 +53,9 @@ def test_relation_status_not_available(harness):
 def test_relation_status_working(harness_with_db_relation):
     harness, _ = harness_with_db_relation
     assert harness.charm.database.state.get() == DPBenchmarkBaseDatabaseModel(
-        hosts=["localhost"], unix_socket=None, username="user", password="pass", db_name="test"
+        hosts=["https://localhost"],
+        unix_socket=None,
+        username="user",
+        password="pass",
+        db_name="test",
     )
