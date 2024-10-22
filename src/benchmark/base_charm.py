@@ -239,7 +239,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
 
     def stop(self) -> None:
         """Stop the benchmark service. Returns true if stop was successful."""
-        if not self.is_running():
+        if not self.workload.is_running():
             raise DPBenchmarkUnitNotReadyError()
         self.workload.stop()
 

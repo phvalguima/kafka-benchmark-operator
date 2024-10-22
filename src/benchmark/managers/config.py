@@ -53,8 +53,8 @@ class ConfigManager:
             duration=self.config.get("duration"),
             clients=self.config.get("clients"),
             db_info=db,
-            workload_name=self.config.get("workload"),
-            workload_params=self.config.get("workload_params"),
+            workload_name=self.config.get("workload_name"),
+            workload_params=self._generate_workload_params(),
             extra=extra_config,
         )
 
@@ -158,3 +158,6 @@ class ConfigManager:
         except Exception:
             return False
         return True
+
+    def _generate_workload_params(self):
+        return {}
