@@ -24,7 +24,7 @@ from charms.operator_libs_linux.v0 import apt
 from ops.framework import EventBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
-from benchmark.benchmark_workload_base import DPBenchmarkService
+from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
 from benchmark.core.state import BenchmarkState
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.literals import (
@@ -52,8 +52,6 @@ class DPBenchmarkCharmBase(ops.CharmBase):
 
     def __init__(self, *args, db_relation_names: List[str] = None):
         super().__init__(*args)
-        self.service = DPBenchmarkService()
-
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.prepare_action, self.on_prepare_action)
@@ -77,11 +75,11 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             ],
             scrape_configs=self.scrape_config,
         )
-        self.database = None
+        self.database = DatabaseRelationHandler(self, db_relation_names)
+        self.service = DPBenchmarkSystemdService(self.database.get_execution_options())
+
         self.benchmark_status = BenchmarkState(self, PEER_RELATION, self.service)
         self.labels = f"{self.model.name},{self.unit.name}"
-
-        self.database = DatabaseRelationHandler(self, db_relation_names)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     def _on_update_status(self, event: EventBase) -> None:

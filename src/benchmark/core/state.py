@@ -7,14 +7,15 @@ from typing import Any
 
 import ops
 
-from benchmark.benchmark_workload_base import DPBenchmarkService
+
+from benchmark.core.workload_base import WorkloadBase
 from benchmark.literals import DPBenchmarkExecStatus, DPBenchmarkIsInWrongStateError
 
 
 class BenchmarkState(ops.Object):
     """Renders the benchmark status updates the relation databag."""
 
-    def __init__(self, charm: ops.charm.CharmBase, relation: str, svc: DPBenchmarkService):
+    def __init__(self, charm: ops.charm.CharmBase, relation: str, svc: WorkloadBase):
         super().__init__(charm, relation)
         self.charm = charm
         self.svc = svc

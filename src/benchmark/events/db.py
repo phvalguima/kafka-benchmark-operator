@@ -17,6 +17,7 @@ from ops.framework import EventBase, EventSource, Object
 from ops.model import Relation
 
 from benchmark.core.models import (
+    DatabaseState,
     DatabaseRelationStatus,
     DPBenchmarkBaseDatabaseModel,
     DPBenchmarkExecutionExtraConfigsModel,
@@ -64,10 +65,11 @@ class DatabaseRelationHandler(Object):
             self.framework.observe(self.charm.on[rel].relation_joined, self._on_endpoints_changed)
             self.framework.observe(self.charm.on[rel].relation_changed, self._on_endpoints_changed)
             self.framework.observe(self.charm.on[rel].relation_broken, self._on_endpoints_changed)
+            self.relations[rel] = DatabaseState(rel, self.charm.model.relations[rel])
 
     def relation_status(self, relation_name) -> DatabaseRelationStatus:
         """Returns the current relation status."""
-        relation = self.charm.model.relations[relation_name]
+        relation = 
         if len(relation) > 1:
             raise DPBenchmarkMultipleRelationsToDBError()
         elif len(relation) == 0:
@@ -83,24 +85,6 @@ class DatabaseRelationHandler(Object):
                 # We have data to build the config object
                 return DatabaseRelationStatus.CONFIGURED
         return DatabaseRelationStatus.AVAILABLE
-
-    def get_database_options(self) -> DPBenchmarkBaseDatabaseModel:
-        """Returns the database options."""
-        endpoints = self.relation_data.get("endpoints")
-
-        unix_socket = None
-        if endpoints.startswith("file://"):
-            unix_socket = endpoints[7:]
-
-        return DPBenchmarkBaseDatabaseModel(
-            hosts=endpoints.split(),
-            unix_socket=unix_socket,
-            username=self.relation_data.get("username"),
-            password=self.relation_data.get("password"),
-            db_name=self.relation_data.get(self.database_key),
-            workload_name=self.workload_name,
-            workload_params=self.workload_params,
-        )
 
     def check(self) -> DatabaseRelationStatus:
         """Returns the current status of all the relations, aggregated."""

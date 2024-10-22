@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from ops.testing import Harness
 
-from benchmark.benchmark_workload_base import DPBenchmarkService
+from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
 from benchmark.core.state import BenchmarkState
 from benchmark.literals import DPBenchmarkExecStatus
 from charm import OpenSearchBenchmarkOperator
@@ -30,7 +30,7 @@ def harness():
 
 def test_app_status(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     charm = harness.charm
     benchmark_status = BenchmarkState(charm, relation_name, svc)
 
@@ -43,7 +43,7 @@ def test_app_status(harness):
 
 def test_unit_status(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     charm = harness.charm
     benchmark_status = BenchmarkState(charm, relation_name, svc)
 
@@ -56,7 +56,7 @@ def test_unit_status(harness):
 
 def test_set_status(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     charm = harness.charm
     benchmark_status = BenchmarkState(charm, relation_name, svc)
 
@@ -70,7 +70,7 @@ def test_set_status(harness):
 
 def test_has_error_happened(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     charm = harness.charm
     benchmark_status = BenchmarkState(charm, relation_name, svc)
 
@@ -83,7 +83,7 @@ def test_has_error_happened(harness):
 
 def test_service_status(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     svc.is_prepared.return_value = True
     svc.is_failed.return_value = False
     svc.is_running.return_value = True
@@ -97,7 +97,7 @@ def test_service_status(harness):
 
 def test_check_status(harness):
     relation_name = "opensearch"
-    svc = MagicMock(DPBenchmarkService)
+    svc = MagicMock(DPBenchmarkSystemdService)
     charm = harness.charm
     benchmark_status = BenchmarkState(charm, relation_name, svc)
 

@@ -28,11 +28,9 @@ from overrides import override
 
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.events.db import DatabaseRelationHandler
-from benchmark.literals import (
-    DPBenchmarkBaseDatabaseModel,
-    DPBenchmarkExecutionExtraConfigsModel,
-    DPBenchmarkExecutionModel,
-)
+from benchmark.core.models import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionExtraConfigsModel, DPBenchmarkExecutionModel
+from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
+
 from literals import INDEX_NAME, OpenSearchExecutionExtraConfigsModel
 
 # Log messages can be retrieved using juju debug-log

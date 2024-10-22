@@ -11,7 +11,7 @@ import os
 import shutil
 from typing import Optional
 
-from charms.operator_libs_linux.v0.systemd import (
+from charms.operator_libs_linux.v1.systemd import (
     daemon_reload,
     service_failed,
     service_restart,
@@ -20,10 +20,10 @@ from charms.operator_libs_linux.v0.systemd import (
 )
 from overrides import override
 
-from benchmark.core.models import BenchmarkServiceState
+from benchmark.core.models import DPBenchmarkExecutionModel
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.literals import (
-    DPBenchmarkExecutionModel,
+    BenchmarkServiceState,
 )
 
 
@@ -213,3 +213,13 @@ class DPBenchmarkSystemdService(WorkloadBase):
             self.workload_parameter_path,
             db.db_info.workload_params,
         )
+
+    @override
+    def exec(
+        self,
+        command: list[str] | str,
+        env: dict[str, str] | None = None,
+        working_dir: str | None = None,
+    ) -> str:
+        """Executes a command on the workload substrate."""
+        pass

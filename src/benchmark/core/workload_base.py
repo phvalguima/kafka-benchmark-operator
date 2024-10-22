@@ -38,6 +38,12 @@ class WorkloadTemplatePaths(ABC):
         """Check if the workload template paths exist."""
         ...
 
+    @property
+    @abstractmethod
+    def templates(self) -> str:
+        """The path to the workload template folder."""
+        ...
+
 
 class WorkloadBase(ABC):
     """Base interface for common workload operations."""
@@ -62,7 +68,7 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
-    def restart(self) -> None:
+    def restart(self) -> bool:
         """Restarts the workload service."""
         ...
 

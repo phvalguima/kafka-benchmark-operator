@@ -4,13 +4,22 @@
 """This module contains the constants and models used by the sysbench charm."""
 
 from enum import Enum
-from typing import Literal
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
-Substrates = Literal["vm", "k8s"]
-Scope = Literal["unit", "app"]
+class Substrate(Enum):
+    """Substrate of the benchmark."""
+
+    VM = "vm"
+    K8S = "k8s"
+
+
+class Scope(Enum):
+    """Scope of the benchmark."""
+
+    UNIT = "unit"
+    APP = "app"
 
 
 METRICS_PORT = 8088
@@ -54,6 +63,10 @@ class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
 
 
+class DPBenchmarkDBRelationNotAvailableError(DPBenchmarkError):
+    """Sysbench failed to execute a command."""
+
+
 class DatabaseRelationState(Enum):
     """Represents the different status of the database relation.
 
@@ -83,6 +96,19 @@ class BenchmarkServiceState(Enum):
     RUNNING = "running"
     FINISHED = "finished"
     FAILED = "failed"
+
+
+class DatabaseRelationStatus(Enum):
+    """Represents the different status of the database relation.
+
+    The ERROR in this case corresponds to the case, for example, more than one
+    relation exists for a given DB, or for multiple DBs.
+    """
+
+    NOT_AVAILABLE = "not_available"
+    AVAILABLE = "available"
+    CONFIGURED = "configured"
+    ERROR = "error"
 
 
 class DPBenchmarkExecStatus(Enum):

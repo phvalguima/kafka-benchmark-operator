@@ -13,15 +13,16 @@ from typing import Any, Optional
 
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource
-from ops.model import Application, Relation, Unit
+from ops.model import Relation
 from pydantic import BaseModel, root_validator
 
 from benchmark.literals import (
     DatabaseRelationStatus,
     DPBenchmarkMissingOptionsError,
     DPBenchmarkMultipleRelationsToDBError,
+    DPBenchmarkDBRelationNotAvailableError,
     Scope,
-    Substrates,
+    Substrate,
 )
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
@@ -45,7 +46,6 @@ class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
 
     This model defines a basic conversion to a string of extra options to be considered.
     """
-
     extra_config: dict[str, Any] = {}
 
     def __str__(self):
@@ -111,8 +111,8 @@ class RelationState:
     def __init__(
         self,
         relation: Relation | None,
-        component: Unit | Application | None,
-        substrate: Substrates | None = Substrates.vm,
+        component: Scope | None,
+        substrate: Substrate | None = Substrate.VM,
         scope: Scope = Scope.UNIT,
     ):
         self.relation = relation
@@ -145,39 +145,48 @@ class RelationState:
 
 class DatabaseState(RelationState):
     """State collection for the database relation."""
-
     def __init__(
         self,
-        charm: CharmBase,
         relation_name: str,
+        relation: Relation
     ):
+        self.database_key = "database"
         super().__init__(
-            relation=self.charm.model.relations[relation_name][0]
+            relation=Relation 
             if self.charm.model.relations[relation_name]
             else None,
             component=None,
             scope=Scope.UNIT,
         )
-        self.database_key = "database"
-        self.charm = charm
 
     def get(self) -> DPBenchmarkBaseDatabaseModel:
         """Returns the value of the key."""
         if len(self.relation) > 1:
             raise DPBenchmarkMultipleRelationsToDBError()
         elif len(self.relation) == 0:
-            return DatabaseRelationStatus.NOT_AVAILABLE
+            raise DPBenchmarkDBRelationNotAvailableError()
         if self.relation_data:
             # self.relation exists and we have some data
             # Try to create an options object and see if it fails
             try:
-                self.get_database_options()
+                endpoints = self.relation_data.get("endpoints")
+
+                unix_socket = None
+                if endpoints.startswith("file://"):
+                    unix_socket = endpoints[7:]
+
+                return DPBenchmarkBaseDatabaseModel(
+                    hosts=endpoints.split(),
+                    unix_socket=unix_socket,
+                    username=self.relation_data.get("username"),
+                    password=self.relation_data.get("password"),
+                    db_name=self.relation_data.get(self.database_key),
+                    workload_name=self.workload_name,
+                    workload_params=self.workload_params,
+                )
             except Exception as e:
                 logger.debug("Failed relation options check %s" % e)
-            else:
-                # We have data to build the config object
-                return DatabaseRelationStatus.CONFIGURED
-        return DatabaseRelationStatus.AVAILABLE
+                raise
 
     def set(self, items: dict[str, str]) -> None:
         """Writes to relation_data."""
