@@ -118,6 +118,11 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
             self,
             "opensearch",
         )
+        self.config_manager = OpenSearchConfigManager(
+            workload=self.workload,
+            database=self.database.state,
+            config=self.config,
+        )
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)

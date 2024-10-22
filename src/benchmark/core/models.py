@@ -14,7 +14,7 @@ from typing import Any, Optional
 from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
 from ops.model import Application, Relation, Unit
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, error_wrappers, root_validator
 
 from benchmark.literals import (
     DPBenchmarkMissingOptionsError,
@@ -201,11 +201,16 @@ class DatabaseState(RelationState):
         unix_socket = None
         if endpoints.startswith("file://"):
             unix_socket = endpoints[7:]
-
-        return DPBenchmarkBaseDatabaseModel(
-            hosts=endpoints.split(),
-            unix_socket=unix_socket,
-            username=self.remote_data.get("username"),
-            password=self.remote_data.get("password"),
-            db_name=self.remote_data.get(self.database_key),
-        )
+        try:
+            return DPBenchmarkBaseDatabaseModel(
+                hosts=endpoints.split(),
+                unix_socket=unix_socket,
+                username=self.remote_data.get("username"),
+                password=self.remote_data.get("password"),
+                db_name=self.remote_data.get(self.database_key),
+            )
+        except error_wrappers.ValidationError as e:
+            logger.warning(f"Failed to validate the database model: {e}")
+            entries = [entry.get("loc")[0] for entry in e.errors()]
+            raise DPBenchmarkMissingOptionsError(f"{entries}")
+        return None

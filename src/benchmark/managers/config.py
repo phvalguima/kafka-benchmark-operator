@@ -39,8 +39,12 @@ class ConfigManager:
         self,
         extra_config: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel(),
     ) -> Optional[DPBenchmarkExecutionModel]:
-        """Returns the execution options."""
-        if not (db := self.database.state.get()):
+        """Returns the execution options.
+
+        Raises:
+            DPBenchmarkMissingOptionsError: If the database is not ready.
+        """
+        if not (db := self.database.get()):
             # It means we are not yet ready. Return None
             # This check also serves to ensure we have only one valid relation at the time
             return None

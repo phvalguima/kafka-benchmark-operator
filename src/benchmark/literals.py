@@ -51,10 +51,6 @@ class DPBenchmarkServiceError(DPBenchmarkExecError):
     """Sysbench service error."""
 
 
-class DPBenchmarkMultipleRelationsToDBError(DPBenchmarkError):
-    """Multiple relations to the same or multiple DBs exist."""
-
-
 class DPBenchmarkExecFailedError(DPBenchmarkError):
     """Sysbench execution failed error."""
 

@@ -17,6 +17,7 @@ from ops.framework import EventBase, EventSource, Object
 from benchmark.core.models import (
     DatabaseState,
 )
+from benchmark.literals import DPBenchmarkMissingOptionsError
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,12 @@ class DatabaseRelationHandler(Object):
 
     def _on_endpoints_changed(self, event: EventBase) -> None:
         """Handles the endpoints_changed event."""
-        if self.state.get():
-            self.on.db_config_update.emit()
+        try:
+            if self.state.get():
+                self.on.db_config_update.emit()
+        except DPBenchmarkMissingOptionsError as e:
+            logger.warning(f"Missing options: {e}")
+            pass
 
     @property
     def client(self) -> Any:
