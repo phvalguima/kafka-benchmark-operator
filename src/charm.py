@@ -72,12 +72,21 @@ class OpenSearchConfigManager(ConfigManager):
 class OpenSearchDatabaseState(DatabaseState):
     """State collection for the database relation."""
 
-    def __init__(self, component: Application | Unit, relation: Relation):
+    def __init__(
+        self, component: Application | Unit, relation: Relation, client: OpenSearchRequires
+    ):
         super().__init__(
             component=component,
             relation=relation,
         )
         self.database_key = "index"
+        self.client = client
+
+    @property
+    @override
+    def remote_data(self) -> dict[str, str]:
+        """Returns the relation data."""
+        return list(self.client.fetch_relation_data().values())[0]
 
 
 class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
@@ -95,9 +104,7 @@ class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
         relation_name: str,
     ):
         super().__init__(charm, relation_name)
-        self.state = OpenSearchDatabaseState(self.charm.app, self.relation)
-        # Triggers the relation with a request
-        self.db_client = self.client
+        self.state = OpenSearchDatabaseState(self.charm.app, self.relation, client=self.client)
 
     @property
     def client(self) -> Any:
