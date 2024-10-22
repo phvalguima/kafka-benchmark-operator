@@ -48,7 +48,7 @@ class WorkloadBase(ABC):
 
     def start(self) -> bool:
         """Starts the workload service."""
-        self.restart(self.paths.service)
+        return self.restart()
 
     @abstractmethod
     def stop(self) -> bool:
@@ -106,9 +106,9 @@ class WorkloadBase(ABC):
     def is_prepared(self) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
         return (
-            self.paths.exists(self.svc_path)
-            and self.paths.exists(self.workload_parameter_path)
-            and self.paths.exists(self.executable)
+            self.paths.exists(self.paths.script)
+            and self.paths.exists(self.paths.workload_parameters)
+            and self.paths.exists(self.paths.service)
         )
 
     def is_running(self) -> bool:

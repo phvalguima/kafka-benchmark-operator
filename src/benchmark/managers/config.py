@@ -76,8 +76,13 @@ class ConfigManager:
 
     def render_service_executable(self) -> bool:
         """Render the benchmark service executable."""
-        shutil.copyfile("templates/" + self.paths.service + ".py", self.executable)
-        os.chmod(self.executable, 0o755)
+        shutil.copyfile(
+            "templates/" + self.workload.paths.svc_name + ".py", self.workload.paths.script
+        )
+        os.chmod(
+            self.workload.paths.script,
+            0o755,
+        )
 
     def render_service_file(
         self,
@@ -90,24 +95,21 @@ class ConfigManager:
             "target_hosts": ",".join(db.db_info.hosts)
             if isinstance(db.db_info.hosts, list)
             else db.db_info.hosts,
-            "workload": db.db_info.workload_name,
+            "workload": db.workload_name,
             "threads": db.threads,
             "clients": db.clients,
             "db_user": db.db_info.username,
             "db_password": db.db_info.password,
             "duration": db.duration,
-            "workload_params": self.workload_parameter_path,
+            "workload_params": self.workload.paths.workload_parameters,
             "extra_labels": labels,
         }
         if extra_config:
             config["extra_config"] = extra_config
-
-        (
-            self._render(
-                self.paths.service + ".service.j2",
-                config,
-                dst_filepath=self.svc_path,
-            ),
+        self._render(
+            self.workload.paths.svc_name + ".service.j2",
+            config,
+            dst_filepath=self.workload.paths.service,
         )
         return daemon_reload()
 
@@ -147,7 +149,7 @@ class ConfigManager:
                 return False
             os.remove(self.workload.paths.service)
             os.remove(self.workload.paths.workload_parameters)
-            if not not daemon_reload():
+            if not daemon_reload():
                 return False
         except Exception:
             return False

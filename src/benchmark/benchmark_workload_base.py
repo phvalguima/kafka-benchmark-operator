@@ -45,7 +45,7 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
     @override
     def workload_parameters(self) -> str:
         """The path to the workload parameters folder."""
-        if not os.path.exists("/root/.benchmark/charmed_parameters"):
+        if not self.exists("/root/.benchmark/charmed_parameters"):
             os.makedirs("/root/.benchmark/charmed_parameters", exist_ok=True)
         return "/root/.benchmark/charmed_parameters/" + self.svc_name + ".json"
 
@@ -118,7 +118,7 @@ class DPBenchmarkSystemdService(WorkloadBase):
 
         This proxy method captures the external exception and re-raises as adequate for the benchmark.
         """
-        if not os.exists(self.svc_path):
+        if not self.paths.exists(self.paths.service):
             return BenchmarkServiceState.NOT_PRESENT
         if service_failed(self.paths.service):
             return BenchmarkServiceState.FAILED

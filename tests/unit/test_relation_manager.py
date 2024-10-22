@@ -28,9 +28,9 @@ def harness_with_db_relation():
     harness = Harness(OpenSearchBenchmarkOperator)
     identity = harness.add_relation("opensearch", "opensearch")
     relation = harness.model.get_relation("opensearch")
-    harness.add_relation_unit(id, "opensearch/0")
+    harness.add_relation_unit(identity, "opensearch/0")
     harness.update_relation_data(
-        id,
+        identity,
         relation.app.name,
         {
             "index": "test",

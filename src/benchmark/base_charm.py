@@ -248,7 +248,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             DPBenchmarkExecStatus.STOPPED,
         ]:
             raise DPBenchmarkStatusError(status)
-        self.workload.run()
+        self.workload.restart()
         self.benchmark_state.set(DPBenchmarkExecStatus.RUNNING)
 
     def on_stop_action(self, event: EventBase) -> None:
