@@ -37,7 +37,7 @@ class ConfigManager:
 
     def get_execution_options(
         self,
-        extra_config: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel(),
+        extra_config: DPBenchmarkExecutionExtraConfigsModel | None = None,
     ) -> Optional[DPBenchmarkExecutionModel]:
         """Returns the execution options.
 
@@ -49,10 +49,12 @@ class ConfigManager:
             # This check also serves to ensure we have only one valid relation at the time
             return None
         return DPBenchmarkExecutionModel(
-            threads=self.charm.config.get("threads"),
-            duration=self.charm.config.get("duration"),
-            clients=self.charm.config.get("clients"),
+            threads=self.config.get("threads"),
+            duration=self.config.get("duration"),
+            clients=self.config.get("clients"),
             db_info=db,
+            workload_name=self.config.get("workload"),
+            workload_params=self.config.get("workload_params"),
             extra=extra_config,
         )
 

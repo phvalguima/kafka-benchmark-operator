@@ -205,7 +205,6 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             db=self.config_manager.get_execution_options(),
             workload_name=self.config["workload_name"],
             labels=self.labels,
-            extra_config=str(self.config_manager.get_execution_options().extra),
         ):
             raise DPBenchmarkExecError()
 
