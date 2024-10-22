@@ -96,6 +96,8 @@ class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
     ):
         super().__init__(charm, relation_name)
         self.state = OpenSearchDatabaseState(self.charm.app, self.relation)
+        # Triggers the relation with a request
+        self.db_client = self.client
 
     @property
     def client(self) -> Any:
