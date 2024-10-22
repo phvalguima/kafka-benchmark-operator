@@ -195,9 +195,8 @@ class DatabaseState(RelationState):
 
     def get(self) -> DPBenchmarkBaseDatabaseModel | None:
         """Returns the value of the key."""
-        if not self.relation:
+        if not self.relation or not (endpoints := self.remote_data.get("endpoints")):
             return None
-        endpoints = self.remote_data.get("endpoints")
 
         unix_socket = None
         if endpoints.startswith("file://"):

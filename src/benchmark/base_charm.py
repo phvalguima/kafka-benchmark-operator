@@ -86,7 +86,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
         benchmark service and the benchmark status.
         """
         try:
-            status = self.database.get()
+            status = self.database.state.get()
         except DPBenchmarkMissingOptionsError as e:
             self.unit.status = BlockedStatus(str(e))
             return
@@ -116,7 +116,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
         """Config changed event."""
         try:
             # First, we check if the status of the service
-            if not self.workload.state.get():
+            if not self.database.state.get():
                 logger.debug("The benchmark is not ready")
                 return
             if not self.stop():
