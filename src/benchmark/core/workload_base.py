@@ -8,7 +8,8 @@ from typing import Any, Optional
 
 from jinja2 import Environment, FileSystemLoader, exceptions
 
-from benchmark.literals import BenchmarkServiceState, DPBenchmarkExecutionModel
+from benchmark.core.models import DPBenchmarkExecutionModel
+from benchmark.literals import BenchmarkServiceState
 
 
 class WorkloadTemplatePaths(ABC):
@@ -22,7 +23,7 @@ class WorkloadTemplatePaths(ABC):
 
     @property
     @abstractmethod
-    def service(self) -> str|None:
+    def service(self) -> str | None:
         """The optional path to the service file managing the script."""
         ...
 
@@ -112,7 +113,7 @@ class WorkloadBase(ABC):
         self,
         template_file: str,
         values: dict[str, Any],
-        dst_filepath: str|None = None,
+        dst_filepath: str | None = None,
     ) -> str:
         """Renders files and return its contents."""
         template_env = Environment(loader=FileSystemLoader(self.paths.template))
@@ -145,22 +146,12 @@ class WorkloadBase(ABC):
 
     def is_running(self) -> bool:
         """Checks if the benchmark service is running."""
-        return (
-            self.is_prepared()
-            and self.check_service() == BenchmarkServiceState.RUNNING
-        )
+        return self.is_prepared() and self.check_service() == BenchmarkServiceState.RUNNING
 
     def is_stopped(self) -> bool:
         """Checks if the benchmark service has stopped."""
-        return (
-            self.is_prepared()
-            and not self.is_running()
-            and not self.is_failed()
-        )
+        return self.is_prepared() and not self.is_running() and not self.is_failed()
 
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""
-        return (
-            self.is_prepared()
-            and self.check_service() == BenchmarkServiceState.FAILED
-        )
+        return self.is_prepared() and self.check_service() == BenchmarkServiceState.FAILED

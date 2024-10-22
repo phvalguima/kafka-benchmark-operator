@@ -41,7 +41,7 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
 
     @property
     @override
-    def service(self) -> str|None:
+    def service(self) -> str | None:
         """The optional path to the service file managing the script."""
         return f"/etc/systemd/system/{self.svc_name}.service"
 
@@ -193,11 +193,13 @@ class DPBenchmarkSystemdService(WorkloadBase):
         if extra_config:
             config["extra_config"] = extra_config
 
-        self._render(
-            self.paths.service + ".service.j2",
-            config,
-           dst_filepath = self.svc_path,
-        ),
+        (
+            self._render(
+                self.paths.service + ".service.j2",
+                config,
+                dst_filepath=self.svc_path,
+            ),
+        )
         return daemon_reload()
 
     def render_workload_parameters(

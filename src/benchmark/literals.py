@@ -77,6 +77,7 @@ class BenchmarkServiceState(Enum):
     * FINISHED: the service has finished
     * FAILED: the service has failed
     """
+
     NOT_PRESENT = "not_present"
     AVAILABLE = "available"
     RUNNING = "running"

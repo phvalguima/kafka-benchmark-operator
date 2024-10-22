@@ -36,6 +36,7 @@ class DatabaseConfigUpdateNeededEvent(EventBase):
 
 class DatabaseHandlerEvents(CharmEvents):
     """Events used by the Database Relation Manager to communicate with the charm."""
+
     db_config_update = EventSource(DatabaseConfigUpdateNeededEvent)
 
 
@@ -44,6 +45,7 @@ class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
 
     This model defines a basic conversion to a string of extra options to be considered.
     """
+
     extra_config: dict[str, Any] = {}
 
     def __str__(self):
@@ -63,6 +65,7 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
 
     Holds all the details of the sysbench database.
     """
+
     hosts: Optional[list[str]]
     unix_socket: Optional[str]
     username: str
@@ -94,18 +97,7 @@ class DPBenchmarkExecutionModel(BaseModel):
 
     Holds all the details of the sysbench execution.
     """
-    threads: int
-    duration: int
-    clients: int
-    db_info: DPBenchmarkBaseDatabaseModel
-    extra: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel()
 
-
-class DPBenchmarkExecutionModel(BaseModel):
-    """Benchmark execution model.
-
-    Holds all the details of the sysbench execution.
-    """
     threads: int
     duration: int
     clients: int
@@ -126,6 +118,7 @@ class RelationState:
         self.relation = relation
         self.substrate = substrate
         self.component = component
+        self.scope = scope
         self.relation_data = self.relation.data[self.scope]
 
     def __bool__(self) -> bool:
@@ -159,10 +152,11 @@ class DatabaseState(RelationState):
         relation_name: str,
     ):
         super().__init__(
-            relation = self.charm.model.relations[relation_name][0]
-            if self.charm.model.relations[relation_name] else None,
-            component = None,
-            scope = Scope.UNIT,
+            relation=self.charm.model.relations[relation_name][0]
+            if self.charm.model.relations[relation_name]
+            else None,
+            component=None,
+            scope=Scope.UNIT,
         )
         self.database_key = "database"
         self.charm = charm

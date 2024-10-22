@@ -16,7 +16,7 @@ from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
 from ops.model import Relation
 
-from benchmark.literals import (
+from benchmark.core.models import (
     DatabaseRelationStatus,
     DPBenchmarkBaseDatabaseModel,
     DPBenchmarkExecutionExtraConfigsModel,
