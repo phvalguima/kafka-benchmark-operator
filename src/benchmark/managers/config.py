@@ -124,7 +124,7 @@ class ConfigManager:
     ):
         """Renders the workload parameters file."""
         self._render(
-            "src/workload_parameter_templates/" + workload_name + ".json.j2",
+            "workload_parameter/" + workload_name + ".json.j2",
             self.workload.paths.workload_parameters,
             self.get_execution_options(),
         )
@@ -136,7 +136,7 @@ class ConfigManager:
         dst_filepath: str | None = None,
     ) -> str:
         """Renders files and return its contents."""
-        template_env = Environment(loader=FileSystemLoader(self.paths.template))
+        template_env = Environment(loader=FileSystemLoader(self.workload.paths.templates))
         try:
             template = template_env.get_template(template_file)
             content = template.render(values)

@@ -166,5 +166,6 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
             return
         return super()._on_config_changed(event)
 
+
 if __name__ == "__main__":
     ops.main(OpenSearchBenchmarkOperator)
