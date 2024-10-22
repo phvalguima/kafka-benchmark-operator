@@ -47,9 +47,10 @@ def test_render_service_file(harness, mock_makedirs):
             workload_params={},
             extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
         )
+        harness.charm.config_manager.get_execution_options = MagicMock(return_value=db)
 
         mock_daemon_reload.return_value = True
-        result = harness.charm.config_manager.render_service_file(db)
+        result = harness.charm.config_manager.render_service_file()
         assert result
         mock_render.assert_called_once_with(
             "dpe_benchmark.service.j2",

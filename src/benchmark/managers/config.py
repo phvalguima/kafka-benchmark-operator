@@ -67,11 +67,9 @@ class ConfigManager:
         """Prepare the benchmark service."""
         try:
             self.render_workload_parameters(
-                db=self.db,
                 workload_name=workload_name,
             )
             if not self.render_service_file(
-                db=self.db,
                 labels=labels,
                 extra_config=extra_config,
             ):
@@ -92,11 +90,12 @@ class ConfigManager:
 
     def render_service_file(
         self,
-        db: DPBenchmarkExecutionModel,
         labels: Optional[str] = "",
         extra_config: str | None = None,
     ) -> bool:
         """Render the systemd service file."""
+        if not (db := self.get_execution_options()):
+            return False
         config = {
             "target_hosts": ",".join(db.db_info.hosts)
             if isinstance(db.db_info.hosts, list)
@@ -121,14 +120,13 @@ class ConfigManager:
 
     def render_workload_parameters(
         self,
-        db: DPBenchmarkExecutionModel,
         workload_name: str,
     ):
         """Renders the workload parameters file."""
         self._render(
             "src/workload_parameter_templates/" + workload_name + ".json.j2",
             self.workload.paths.workload_parameters,
-            db.db_info.workload_params,
+            self.get_execution_options(),
         )
 
     def _render(

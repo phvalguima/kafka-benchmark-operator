@@ -202,7 +202,6 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             self.workload.exec("prepare", self.labels)
 
         if not self.config_manager.prepare(
-            db=self.config_manager.get_execution_options(),
             workload_name=self.config["workload_name"],
             labels=self.labels,
         ):
