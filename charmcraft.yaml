@@ -13,7 +13,8 @@ parts:
       /root/.local/bin/poetry export --only main,charm-libs --output requirements.txt
 
       craftctl default
-    charm-strict-dependencies: true
+    # TODO: uncomment this line once we get charmcraftcache for opensearch-benchmark
+    # charm-strict-dependencies: true
     charm-requirements: [requirements.txt]
     charm-entrypoint: src/charm.py
     build-snaps:
