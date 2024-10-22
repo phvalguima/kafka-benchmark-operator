@@ -101,7 +101,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
             self.unit.status = BlockedStatus("Benchmark failed, please check logs")
         elif self.workload.is_running():
             self.unit.status = ActiveStatus("Benchmark is running")
-        elif self.workload.is_prepared() and self.peer_state.is_prepared():
+        elif self.workload.is_prepared():  # and self.peer_state.is_prepared():
             self.unit.status = WaitingStatus("Benchmark is prepared: execute run to start")
         elif self.workload.is_stopped():
             self.unit.status = BlockedStatus("Benchmark is stopped after run")

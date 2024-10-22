@@ -125,8 +125,8 @@ class ConfigManager:
         """Renders the workload parameters file."""
         self._render(
             "workload_parameter/" + workload_name + ".json.j2",
-            self.workload.paths.workload_parameters,
             self.get_execution_options(),
+            self.workload.paths.workload_parameters,
         )
 
     def _render(
