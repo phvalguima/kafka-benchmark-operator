@@ -11,7 +11,7 @@ as changes in the configuration.
 import logging
 from typing import Any, Optional
 
-from ops.charm import CharmBase, CharmEvents
+from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
 from ops.model import Relation
 from pydantic import BaseModel, root_validator
@@ -19,8 +19,6 @@ from pydantic import BaseModel, root_validator
 from benchmark.literals import (
     DatabaseRelationStatus,
     DPBenchmarkMissingOptionsError,
-    DPBenchmarkMultipleRelationsToDBError,
-    DPBenchmarkDBRelationNotAvailableError,
     Scope,
     Substrate,
 )
@@ -46,6 +44,7 @@ class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
 
     This model defines a basic conversion to a string of extra options to be considered.
     """
+
     extra_config: dict[str, Any] = {}
 
     def __str__(self):
@@ -145,48 +144,34 @@ class RelationState:
 
 class DatabaseState(RelationState):
     """State collection for the database relation."""
-    def __init__(
-        self,
-        relation_name: str,
-        relation: Relation
-    ):
+
+    def __init__(self, relation_name: str, relation: Relation):
         self.database_key = "database"
         super().__init__(
-            relation=Relation 
-            if self.charm.model.relations[relation_name]
-            else None,
+            relation=Relation if self.charm.model.relations[relation_name] else None,
             component=None,
             scope=Scope.UNIT,
         )
 
-    def get(self) -> DPBenchmarkBaseDatabaseModel:
+    def get(self) -> DPBenchmarkBaseDatabaseModel | None:
         """Returns the value of the key."""
-        if len(self.relation) > 1:
-            raise DPBenchmarkMultipleRelationsToDBError()
-        elif len(self.relation) == 0:
-            raise DPBenchmarkDBRelationNotAvailableError()
-        if self.relation_data:
-            # self.relation exists and we have some data
-            # Try to create an options object and see if it fails
-            try:
-                endpoints = self.relation_data.get("endpoints")
+        if len(self.relation) == 0:
+            return None
+        endpoints = self.relation_data.get("endpoints")
 
-                unix_socket = None
-                if endpoints.startswith("file://"):
-                    unix_socket = endpoints[7:]
+        unix_socket = None
+        if endpoints.startswith("file://"):
+            unix_socket = endpoints[7:]
 
-                return DPBenchmarkBaseDatabaseModel(
-                    hosts=endpoints.split(),
-                    unix_socket=unix_socket,
-                    username=self.relation_data.get("username"),
-                    password=self.relation_data.get("password"),
-                    db_name=self.relation_data.get(self.database_key),
-                    workload_name=self.workload_name,
-                    workload_params=self.workload_params,
-                )
-            except Exception as e:
-                logger.debug("Failed relation options check %s" % e)
-                raise
+        return DPBenchmarkBaseDatabaseModel(
+            hosts=endpoints.split(),
+            unix_socket=unix_socket,
+            username=self.relation_data.get("username"),
+            password=self.relation_data.get("password"),
+            db_name=self.relation_data.get(self.database_key),
+            workload_name=self.workload_name,
+            workload_params=self.workload_params,
+        )
 
     def set(self, items: dict[str, str]) -> None:
         """Writes to relation_data."""

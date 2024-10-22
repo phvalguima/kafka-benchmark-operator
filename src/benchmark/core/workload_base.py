@@ -4,9 +4,6 @@
 """Supporting objects for Benchmark charm state."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
-
-from jinja2 import Environment, FileSystemLoader, exceptions
 
 from benchmark.core.models import DPBenchmarkExecutionModel
 from benchmark.literals import BenchmarkServiceState
@@ -115,23 +112,6 @@ class WorkloadBase(ABC):
         """Checks if the workload service is running."""
         ...
 
-    def _render(
-        self,
-        template_file: str,
-        values: dict[str, Any],
-        dst_filepath: str | None = None,
-    ) -> str:
-        """Renders files and return its contents."""
-        template_env = Environment(loader=FileSystemLoader(self.paths.template))
-        try:
-            template = template_env.get_template(template_file)
-            content = template.render(values)
-        except exceptions.TemplateNotFound as e:
-            raise e
-        if not dst_filepath:
-            return content
-        self.write(content, dst_filepath)
-
     def is_prepared(self) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
         return (
@@ -139,16 +119,6 @@ class WorkloadBase(ABC):
             and self.paths.exists(self.workload_parameter_path)
             and self.paths.exists(self.executable)
         )
-
-    @abstractmethod
-    def prepare(
-        self,
-        workload_name: str,
-        labels: Optional[str] = "",
-        extra_config: Optional[str] = "",
-    ) -> bool:
-        """Prepare the benchmark service."""
-        ...
 
     def is_running(self) -> bool:
         """Checks if the benchmark service is running."""
