@@ -62,7 +62,6 @@ class ConfigManager:
         self,
         workload_name: str,
         labels: Optional[str] = "",
-        extra_config: Optional[str] = "",
     ) -> bool:
         """Prepare the benchmark service."""
         try:
@@ -71,7 +70,6 @@ class ConfigManager:
             )
             if not self.render_service_file(
                 labels=labels,
-                extra_config=extra_config,
             ):
                 return False
         except Exception:
@@ -91,7 +89,6 @@ class ConfigManager:
     def render_service_file(
         self,
         labels: Optional[str] = "",
-        extra_config: str | None = None,
     ) -> bool:
         """Render the systemd service file."""
         if not (db := self.get_execution_options()):
@@ -109,8 +106,8 @@ class ConfigManager:
             "workload_params": self.workload.paths.workload_parameters,
             "extra_labels": labels,
         }
-        if extra_config:
-            config["extra_config"] = extra_config
+        if db.extra:
+            config["extra_config"] = db.extra
         self._render(
             self.workload.paths.svc_name + ".service.j2",
             config,

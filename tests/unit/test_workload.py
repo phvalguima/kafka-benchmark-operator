@@ -45,7 +45,7 @@ def test_render_service_file(harness, mock_makedirs):
             duration=60,
             workload_name="workload",
             workload_params={},
-            extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
+            extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=True),
         )
         harness.charm.config_manager.get_execution_options = MagicMock(return_value=db)
 
@@ -64,6 +64,7 @@ def test_render_service_file(harness, mock_makedirs):
                 "duration": 60,
                 "workload_params": "/root/.benchmark/charmed_parameters/dpe_benchmark.json",
                 "extra_labels": "",
+                "extra_config": " --test_mode",
             },
             dst_filepath="/etc/systemd/system/dpe_benchmark.service",
         )

@@ -78,7 +78,6 @@ class OpenSearchConfigManager(ConfigManager):
     def render_service_file(
         self,
         labels: Optional[str] = "",
-        extra_config: str | None = None,
     ) -> bool:
         """Render the systemd service file."""
         if not (db := self.get_execution_options()):
@@ -96,14 +95,11 @@ class OpenSearchConfigManager(ConfigManager):
             "workload_params": self.workload.paths.workload_parameters,
             "extra_labels": labels,
         }
-        if extra_config:
-            config["extra_config"] = ""
-            for key, val in extra_config.items():
-                prefix = "--" if len(key) > 1 else "-"
-                if val is None:
-                    config["extra_config"] += f" {prefix}{key}"
-                else:
-                    config["extra_config"] += f" {prefix}{key}={val}"
+        config["extra_config"] = ""
+        if db.extra.run_count:
+            config["extra_config"] += f" --run_count={db.extra.run_count}"
+        if db.extra.test_mode:
+            config["extra_config"] += " --test_mode"
         self._render(
             self.workload.paths.svc_name + ".service.j2",
             config,
