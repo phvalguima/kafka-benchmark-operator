@@ -3,9 +3,7 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-from enum import Enum
-
-from benchmark.literals import DPBenchmarkExecutionExtraConfigsModel
+from benchmark.core.models import DPBenchmarkExecutionExtraConfigsModel
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
@@ -36,19 +34,6 @@ class DPBenchmarkExecFailedError(DPBenchmarkError):
 
 class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
-
-
-class DatabaseRelationStatus(Enum):
-    """Represents the different status of the database relation.
-
-    The ERROR in this case corresponds to the case, for example, more than one
-    relation exists for a given DB, or for multiple DBs.
-    """
-
-    NOT_AVAILABLE = "not_available"
-    AVAILABLE = "available"
-    CONFIGURED = "configured"
-    ERROR = "error"
 
 
 class OpenSearchExecutionExtraConfigsModel(DPBenchmarkExecutionExtraConfigsModel):

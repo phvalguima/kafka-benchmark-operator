@@ -6,10 +6,6 @@ from unittest.mock import patch
 
 from ops.model import ActiveStatus
 
-from benchmark.literals import (
-    DatabaseRelationStatus,
-)
-
 
 def test_starting(harness):
     with (
@@ -17,7 +13,7 @@ def test_starting(harness):
         patch("os.path.exists") as mock_exists,
         patch("benchmark.base_charm.apt") as mock_apt,
         patch("subprocess.run") as mock_check_output,
-        patch("benchmark.managers.service.DPBenchmarkService.render_service_executable"),
+        patch("benchmark.managers.config.ConfigManager.render_service_executable"),
     ):
         mock_exists.return_value = True
         harness.charm._on_install(None)
@@ -33,7 +29,6 @@ def test_starting(harness):
         mock_remove.assert_called_once()
         mock_check_output.assert_any_call("sudo pip3 install opensearch-benchmark", shell=True)
         assert isinstance(harness.charm.unit.status, ActiveStatus)
-    assert harness.charm.database.check() == DatabaseRelationStatus.NOT_AVAILABLE
 
 
 def test_supported_workloads(harness):

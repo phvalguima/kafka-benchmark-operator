@@ -4,14 +4,14 @@
 
 from unittest.mock import MagicMock, patch
 
-from benchmark.literals import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
-from benchmark.managers.service import DPBenchmarkService
+from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
+from benchmark.core.models import DPBenchmarkBaseDatabaseModel, DPBenchmarkExecutionModel
 from literals import OpenSearchExecutionExtraConfigsModel
 
 
 def test_is_prepared(harness, mock_makedirs):
     with patch("os.path.exists") as mock_exists:
-        service = DPBenchmarkService()
+        service = DPBenchmarkSystemdService()
         mock_exists.return_value = True
         assert service.is_prepared()
         mock_exists.return_value = False
@@ -20,8 +20,8 @@ def test_is_prepared(harness, mock_makedirs):
 
 def test_render_service_executable(harness, mock_makedirs):
     with patch("shutil.copyfile") as mock_copyfile, patch("os.chmod") as mock_chmod:
-        service = DPBenchmarkService()
-        service.render_service_executable()
+        cm = harness.charm.config_manager
+        cm.render_service_executable()
         mock_copyfile.assert_called_once_with(
             "templates/dpe_benchmark.py", "/usr/bin/dpe_benchmark.py"
         )
@@ -30,31 +30,30 @@ def test_render_service_executable(harness, mock_makedirs):
 
 def test_render_service_file(harness, mock_makedirs):
     with (
-        patch("benchmark.managers.service._render") as mock_render,
-        patch("benchmark.managers.service.daemon_reload") as mock_daemon_reload,
+        patch("benchmark.managers.config.ConfigManager._render") as mock_render,
+        patch("charm.daemon_reload") as mock_daemon_reload,
     ):
-        service = DPBenchmarkService()
         db = DPBenchmarkExecutionModel(
             db_info=DPBenchmarkBaseDatabaseModel(
                 hosts=["localhost"],
-                workload_name="workload",
                 db_name="test_index",
                 username="user",
                 password="pass",
-                workload_params={},
             ),
             threads=4,
             clients=10,
             duration=60,
-            extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
+            workload_name="workload",
+            workload_params={},
+            extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=True),
         )
+        harness.charm.config_manager.get_execution_options = MagicMock(return_value=db)
 
         mock_daemon_reload.return_value = True
-        result = service.render_service_file(db)
+        result = harness.charm.config_manager.render_service_file()
         assert result
         mock_render.assert_called_once_with(
             "dpe_benchmark.service.j2",
-            "/etc/systemd/system/dpe_benchmark.service",
             {
                 "target_hosts": "localhost",
                 "workload": "workload",
@@ -65,17 +64,21 @@ def test_render_service_file(harness, mock_makedirs):
                 "duration": 60,
                 "workload_params": "/root/.benchmark/charmed_parameters/dpe_benchmark.json",
                 "extra_labels": "",
+                "extra_config": " --test_mode",
             },
+            dst_filepath="/etc/systemd/system/dpe_benchmark.service",
         )
         mock_daemon_reload.assert_called_once()
 
 
 def test_is_running(harness, mock_makedirs):
     with (
-        patch("os.path.exists") as mock_exists,
-        patch("benchmark.managers.service.service_running") as mock_service_running,
+        patch(
+            "benchmark.benchmark_workload_base.DPBenchmarkSystemdTemplatePaths.exists"
+        ) as mock_exists,
+        patch("benchmark.benchmark_workload_base.service_running") as mock_service_running,
     ):
-        service = DPBenchmarkService()
+        service = DPBenchmarkSystemdService()
         mock_exists.return_value = True
         mock_service_running.return_value = True
         assert service.is_running()
@@ -86,9 +89,9 @@ def test_is_running(harness, mock_makedirs):
 def test_is_failed(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.managers.service.service_failed") as mock_service_failed,
+        patch("benchmark.benchmark_workload_base.service_failed") as mock_service_failed,
     ):
-        service = DPBenchmarkService()
+        service = DPBenchmarkSystemdService()
         mock_exists.return_value = True
         mock_service_failed.return_value = True
         assert service.is_failed()
@@ -99,9 +102,9 @@ def test_is_failed(harness, mock_makedirs):
 def test_stop(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.managers.service.service_stop") as mock_service_stop,
+        patch("benchmark.benchmark_workload_base.service_stop") as mock_service_stop,
     ):
-        service = DPBenchmarkService()
+        service = DPBenchmarkSystemdService()
         mock_exists.return_value = True
         mock_service_stop.return_value = True
         with patch.object(service, "is_running", return_value=True):
@@ -109,29 +112,32 @@ def test_stop(harness, mock_makedirs):
         mock_service_stop.assert_called_once()
 
 
-def test_run(harness, mock_makedirs):
+def test_start(harness, mock_makedirs):
     with (
         patch("os.path.exists") as mock_exists,
-        patch("benchmark.managers.service.service_restart") as mock_service_restart,
+        patch("benchmark.benchmark_workload_base.service_restart") as mock_service_restart,
     ):
-        service = DPBenchmarkService()
+        service = DPBenchmarkSystemdService()
         mock_exists.return_value = True
         mock_service_restart.return_value = True
         with patch.object(service, "is_stopped", return_value=True):
-            assert service.run()
+            assert service.restart()
         mock_service_restart.assert_called_once()
 
 
 def test_unset(harness, mock_makedirs):
     with (
         patch("os.remove") as mock_remove,
-        patch("benchmark.managers.service.daemon_reload") as mock_daemon_reload,
-        patch("benchmark.managers.service.service_stop") as mock_service_stop,
-        patch("benchmark.managers.service.service_running") as mock_service_running,
+        patch("os.path.exists") as mock_exists,
+        patch("benchmark.managers.config.daemon_reload") as mock_daemon_reload,
+        patch("benchmark.benchmark_workload_base.service_stop") as mock_service_stop,
+        patch("benchmark.benchmark_workload_base.service_running") as mock_service_running,
     ):
-        service = DPBenchmarkService()
-        service.is_prepared = MagicMock(return_value=True)
+        service = harness.charm.config_manager
+        workload = service.workload
+        workload.is_prepared = MagicMock(return_value=True)
 
+        mock_exists.return_value = True
         mock_service_running.return_value = True
 
         mock_service_stop.return_value = True
@@ -139,6 +145,6 @@ def test_unset(harness, mock_makedirs):
         assert service.unset()
         mock_service_stop.assert_called_once()
 
-        mock_remove.assert_any_call(service.svc_path)
-        mock_remove.assert_any_call(service.workload_parameter_path)
+        mock_remove.assert_any_call(workload.paths.service)
+        mock_remove.assert_any_call(workload.paths.workload_parameters)
         mock_daemon_reload.assert_called_once()

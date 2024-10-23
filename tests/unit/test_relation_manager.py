@@ -7,13 +7,10 @@ from unittest.mock import PropertyMock, patch
 import pytest
 from ops.testing import Harness
 
-from benchmark.events.db import (
-    DatabaseRelationStatus,
-    DPBenchmarkExecutionModel,
-    DPBenchmarkMultipleRelationsToDBError,
+from benchmark.core.models import (
+    DPBenchmarkBaseDatabaseModel,
 )
 from charm import OpenSearchBenchmarkOperator
-from literals import OpenSearchExecutionExtraConfigsModel
 
 
 @pytest.fixture
@@ -27,72 +24,38 @@ def harness():
 
 
 @pytest.fixture
-def database_relation(harness):
-    return harness.add_relation("opensearch", "opensearch")
+def harness_with_db_relation():
+    harness = Harness(OpenSearchBenchmarkOperator)
+    identity = harness.add_relation("opensearch", "opensearch")
+    relation = harness.model.get_relation("opensearch")
+    harness.add_relation_unit(identity, "opensearch/0")
+    harness.update_relation_data(
+        identity,
+        relation.app.name,
+        {
+            "index": "test",
+            "endpoints": "localhost",
+            "username": "user",
+            "password": "pass",
+        },
+    )
+    with patch("ops.model.Model.name", new_callable=PropertyMock) as mock_name:
+        mock_name.return_value = "test_model"
+        harness.begin()
+
+    return (harness, identity)
 
 
 def test_relation_status_not_available(harness):
-    status = harness.charm.database.relation_status("opensearch")
-    assert status == DatabaseRelationStatus.NOT_AVAILABLE
+    assert not harness.charm.database.state.get()
 
 
-def test_relation_status_multiple_relations(harness, database_relation):
-    harness.add_relation("opensearch", "opensearch_2")
-    with pytest.raises(DPBenchmarkMultipleRelationsToDBError):
-        harness.charm.database.relation_status("opensearch")
-
-
-def test_relation_status_working(harness, database_relation):
-    db_rel_id = database_relation
-    relation = harness.model.get_relation("opensearch")
-    assert not harness.charm.database._relation_has_data(relation)
-
-    harness.update_relation_data(
-        db_rel_id,
-        relation.app.name,
-        {},
+def test_relation_status_working(harness_with_db_relation):
+    harness, _ = harness_with_db_relation
+    assert harness.charm.database.state.get() == DPBenchmarkBaseDatabaseModel(
+        hosts=["https://localhost"],
+        unix_socket=None,
+        username="user",
+        password="pass",
+        db_name="test",
     )
-    assert not harness.charm.database._relation_has_data(relation)
-    status = harness.charm.database.relation_status("opensearch")
-    assert status == DatabaseRelationStatus.AVAILABLE
-
-    harness.update_relation_data(
-        db_rel_id,
-        relation.app.name,
-        {
-            "index": "test",
-            "endpoints": "localhost",
-            "username": "user",
-            "password": "pass",
-        },
-    )
-    assert harness.charm.database._relation_has_data(relation)
-    status = harness.charm.database.relation_status("opensearch")
-    assert status == DatabaseRelationStatus.CONFIGURED
-
-
-def test_relation_get_execution_options(harness, database_relation):
-    db_rel_id = database_relation
-    relation = harness.model.get_relation("opensearch")
-    assert not harness.charm.database._relation_has_data(relation)
-    harness.update_relation_data(
-        db_rel_id,
-        relation.app.name,
-        {
-            "index": "test",
-            "endpoints": "localhost",
-            "username": "user",
-            "password": "pass",
-        },
-    )
-
-    db_opts = DPBenchmarkExecutionModel(
-        threads=10,
-        duration=0,
-        clients=8,
-        db_info=harness.charm.database.get_database_options(),
-        extra=OpenSearchExecutionExtraConfigsModel(run_count=0, test_mode=False),
-    )
-
-    options = harness.charm.database.get_execution_options()
-    assert options == db_opts
