@@ -114,6 +114,10 @@ class DPBenchmarkCharmBase(ops.CharmBase):
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
+        if not self.workload.is_prepared():
+            # nothing to do: set the status and leave
+            self._set_status()
+            return
         try:
             # First, we check if the status of the service
             if not self.database.state.get():
@@ -277,5 +281,7 @@ class DPBenchmarkCharmBase(ops.CharmBase):
         """List the supported workloads."""
         return [
             ".".join(name.split(".")[:-2])
-            for name in os.listdir("src/workload_parameter_templates")
+            for name in os.listdir(
+                os.path.join(self.workload.paths.templates, "workload_parameter")
+            )
         ]
