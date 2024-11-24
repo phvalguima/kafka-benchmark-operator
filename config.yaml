@@ -1,32 +1,52 @@
 options:
-  threads:
-    default: 10
-    type: int
+  test_name:
+    default: ""
+    type: string
     description: |
-      Number of concurrent threads that will perform the test.
-  clients:
+      Used to identify the test. MUST NOT be empty.
+      It is the string that represents the given test (e.g. "aws_c6a.xlarge_3nodes_<WORKLOAD>").
+      It is used by the collector to put the final data on the right place.
+  parallel_process:
     default: 8
     type: int
     description: |
-      Number of concurrent clients submitting transactions involved in the testing.
+      Number of parallel process managed by the benchmark tool.
+  threads:
+    default: 8
+    type: int
+    description: |
+      Number of concurrent tasks within a given process.
+      The best way to understand this concept is to imagine it
+      as python coroutines running concurrently within the same process.
   duration:
     default: 0
     type: int
     description: |
-      Duration of the test in seconds. If set to 0, it does not stop.
+      Time in seconds to run the benchmark, 0 means indefinitely.
   run_count:
     default: 0
     type: int
     description: |
-      Number of times to run the test. If set to 0, it does not stop.
-      If both duration and run_count are set, the first to finish will stop the test.
+      Number of counts to run, 0 means indefinitely.
+      If both duration and run_count are set, duration takes precedence.
   workload_name:
     default: "nyc_taxis"
     type: string
     description: |
-      Name of the workload to use.
-  test_mode:
-    default: false
-    type: boolean
+      The name of the workload to be prepared and used.
+  override_access_hostname:
+    default: ""
+    type: string
     description: |
-      To set the test in Test mode or not.
+      Overrides the default relation endpoint shared via client relation,
+      e.g. if we have a VIP in front of the databases and we want to test it through VIP instead of the relation's default value.
+  report_interval:
+    default: 1
+    type: int
+    description: |
+      Int, number of seconds we should periodically report interval
+  workload_profile:
+    default: "default"
+    type: string
+    description: |
+      The workload profile to be used.

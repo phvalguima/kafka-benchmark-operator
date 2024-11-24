@@ -1,19 +1,27 @@
-list-workloads:
-  description: |
-    Lists all the workloads available in this server.
-
 prepare:
   description: |
-    Prepares the database.
+    Prepares the workload.
 
 run:
   description: |
-    Kickstarts the sysbench service in this server.
+    Kickstarts the benchmark service in this server.
 
 stop:
   description: |
-    Stops the sysbench service in this server.
+    Stops the benchmark service in this server.
 
-clean:
+get-summary:
   description: |
-    Cleans up the database.
+    Allow for the test result to be obtained in cases when COS or Upload are not needed.
+    The benchmark result collection happens anyways and is be stored in a folder within the unit.
+    It reports in the output (either table or json) where the user can find the collection tarball
+    in its own filesystem in addition to basic test results
+    (e.g. time elapsed, queries executed, queries per second, etc).
+  parameters:
+    output:
+      description: |
+        The output format of the summary. It can be either a table or a json.
+
+cleanup:
+  description: |
+    Cleans up the workload from the application and unsets all the prepared configuration.

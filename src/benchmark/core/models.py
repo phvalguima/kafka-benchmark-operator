@@ -11,12 +11,11 @@ as changes in the configuration.
 import logging
 from typing import Any, Optional
 
-from ops.charm import CharmEvents
-from ops.framework import EventBase, EventSource
 from ops.model import Application, Relation, Unit
 from pydantic import BaseModel, error_wrappers, root_validator
 
 from benchmark.literals import (
+    DPBenchmarkLifecyclePhase,
     DPBenchmarkMissingOptionsError,
     Scope,
     Substrate,
@@ -28,41 +27,8 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 logger = logging.getLogger(__name__)
 
 
-class DatabaseConfigUpdateNeededEvent(EventBase):
-    """informs the charm that we have an update in the DB config."""
-
-
-class DatabaseHandlerEvents(CharmEvents):
-    """Events used by the Database Relation Manager to communicate with the charm."""
-
-    db_config_update = EventSource(DatabaseConfigUpdateNeededEvent)
-
-
-class DPBenchmarkExecutionExtraConfigsModel(BaseModel):
-    """Holds all the details of the sysbench execution extra config.
-
-    This model defines a basic conversion to a string of extra options to be considered.
-    """
-
-    extra_config: dict[str, Any] = {}
-
-    def __str__(self):
-        """Returns a string of extra options to be considered."""
-        cfg = ""
-        for key, val in self.extra_config.items():
-            prefix = "--" if len(key) > 1 else "-"
-            if val is None:
-                cfg += f"{prefix}{key} "
-            else:
-                cfg += f"{prefix}{key}={val} "
-        return cfg
-
-
 class DPBenchmarkBaseDatabaseModel(BaseModel):
-    """Benchmark database model.
-
-    Holds all the details of the sysbench database.
-    """
+    """Holds the data specific to connect with the target application."""
 
     hosts: Optional[list[str]]
     unix_socket: Optional[str]
@@ -88,19 +54,31 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
         return field_values
 
 
-class DPBenchmarkExecutionModel(BaseModel):
+class DPBenchmarkConfigModelBase(BaseModel):
+    """Benchmark config model contains all the information needed to render the workload.
+
+    This model is used to render the workload config files.
+
+    This class is abstract as each benchmark charm must inherit from it and provide the
+    necessary implementation.
+    """
+    workload_profile: str = "default"
+
+
+class DPBenchmarkWrapperModel(BaseModel):
     """Benchmark execution model.
 
-    Holds all the details of the sysbench execution.
+    This class contains all the config info needed to pass to the benchmark tool wrapper,
+    that will be managing the workload.
     """
-
+    test_name: str
+    parallel_processes: int
     threads: int
     duration: int
-    clients: int
+    run_count: int
     db_info: DPBenchmarkBaseDatabaseModel
     workload_name: str
-    workload_params: dict[str, str]
-    extra: DPBenchmarkExecutionExtraConfigsModel = DPBenchmarkExecutionExtraConfigsModel()
+    report_interval: int
 
 
 class RelationState:
@@ -153,13 +131,10 @@ class RelationState:
 
 
 class PeerState(RelationState):
-    """State collection for the database relation.
+    """State collection for the database relation."""
 
-    The following items are managed by this state:
-    * is_prepared: bool
-      used to define if the database has been loaded with any warmup data.
-      It must be true before starting the benchmark.
-    """
+    LIFECYCLE_KEY = "lifecycle"
+    STOP_KEY = "stop"
 
     def __init__(self, component: Application | Unit, relation: Relation | None):
         super().__init__(
@@ -168,18 +143,27 @@ class PeerState(RelationState):
             scope=Scope.UNIT,
         )
 
-    @property
-    def is_prepared(self) -> bool:
-        """Returns the value of the key."""
-        return self.relation_data.get("is_prepared", "false") == "true"
+    def get(self) -> Any:
+        return self.relation_data.get(
+            self.LIFECYCLE_KEY,
+            None,
+        )
 
-    @is_prepared.setter
-    def is_prepared(self, prepared: bool):
-        """Returns the value of the key."""
-        if prepared:
-            self.set({"is_prepared": "true"})
-        else:
-            self.set({"is_prepared": None})
+    @property
+    def lifecycle(self) -> DPBenchmarkLifecyclePhase|None:
+        return self.get(self.LIFECYCLE_KEY)
+
+    @lifecycle.setter
+    def lifecycle(self, status: DPBenchmarkLifecyclePhase):
+        self.set({self.LIFECYCLE_KEY: status})
+
+    @property
+    def stop(self) -> bool:
+        self.relation_data.get(self.STOP_KEY, False)
+
+    @stop.setter
+    def stop(self, switch: bool) -> bool:
+        self.set({self.STOP_KEY: switch})
 
 
 class DatabaseState(RelationState):

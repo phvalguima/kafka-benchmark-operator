@@ -13,20 +13,20 @@ class WorkloadTemplatePaths(ABC):
 
     @property
     @abstractmethod
-    def script(self) -> str:
-        """The main script managed by the service."""
+    def benchmark_wrapper(self) -> str:
+        """The main benchmark_wrapper managed by the service."""
         ...
 
     @property
     @abstractmethod
     def service(self) -> str | None:
-        """The optional path to the service file managing the script."""
+        """The optional path to the service file managing the python wrapper."""
         ...
 
     @property
     @abstractmethod
     def workload_parameters(self) -> str:
-        """The path to the workload parameters folder."""
+        """The path to the workload parameters file."""
         ...
 
     @abstractmethod
@@ -45,6 +45,10 @@ class WorkloadBase(ABC):
     """Base interface for common workload operations."""
 
     paths: WorkloadTemplatePaths
+
+    def install(self) -> None:
+        """Installs the workload."""
+        ...
 
     def start(self) -> bool:
         """Starts the workload service."""
@@ -106,7 +110,7 @@ class WorkloadBase(ABC):
     def is_prepared(self) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
         return (
-            self.paths.exists(self.paths.script)
+            self.paths.exists(self.paths.benchmark_wrapper)
             and self.paths.exists(self.paths.workload_parameters)
             and self.paths.exists(self.paths.service)
         )
@@ -118,6 +122,11 @@ class WorkloadBase(ABC):
     def is_stopped(self) -> bool:
         """Checks if the benchmark service has stopped."""
         return self.is_prepared() and not self.is_running() and not self.is_failed()
+
+    @abstractmethod
+    def is_uploading(self) -> bool:
+        """Checks if the benchmark service is still running the upload process."""
+        ...
 
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""

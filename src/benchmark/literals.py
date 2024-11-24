@@ -3,19 +3,19 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-from enum import Enum
+from enum import StrEnum
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
-class Substrate(Enum):
+class Substrate(StrEnum):
     """Substrate of the benchmark."""
 
     VM = "vm"
     K8S = "k8s"
 
 
-class Scope(Enum):
+class Scope(StrEnum):
     """Scope of the benchmark."""
 
     UNIT = "unit"
@@ -63,73 +63,40 @@ class DPBenchmarkDBRelationNotAvailableError(DPBenchmarkError):
     """Sysbench failed to execute a command."""
 
 
-class DatabaseRelationState(Enum):
-    """Represents the different status of the database relation.
-
-    The ERROR in this case corresponds to the case, for example, more than one
-    relation exists for a given DB, or for multiple DBs.
-    """
-
-    NOT_AVAILABLE = "not_available"
-    AVAILABLE = "available"
-    CONFIGURED = "configured"
-    ERROR = "error"
-
-
-class BenchmarkServiceState(Enum):
-    """Benchmark service status representation.
+class DPBenchmarkLifecyclePhase(StrEnum):
+    """Benchmark lifecycle representation.
 
     The status are:
-    * NOT_PRESENT: the service is not present
+    * UNSET: the service is not set yet
     * AVAILABLE: the service is present and ready to be started
     * RUNNING: the service is running
-    * FINISHED: the service has finished
     * FAILED: the service has failed
+    * COLLECTING: the service is collecting data
+    * UPLOADING: once the RUNNING phase is finished, it moves to "UPLOADING" whilst the data is
+                 copied to the S3 endpoint
+    * FINISHED: the service has finished
+    * STOPPED: the service has been stopped by the user
     """
-
-    NOT_PRESENT = "not_present"
+    UNSET = "unset"
     AVAILABLE = "available"
     RUNNING = "running"
+    FAILED = "failed"
+    COLLECTING = "collecting"
+    UPLOADING = "uploading"
     FINISHED = "finished"
+    STOPPED = "stopped"
+
+
+class DPBenchmarkServiceState(StrEnum):
+    """Represents the different states of the benchmark service."""
+    RUNNING = "running"
+    STOPPED = "stopped"
     FAILED = "failed"
 
 
-class DatabaseRelationStatus(Enum):
-    """Represents the different status of the database relation.
-
-    The ERROR in this case corresponds to the case, for example, more than one
-    relation exists for a given DB, or for multiple DBs.
-    """
-
+class DPBenchmarkRelationLifecycle(StrEnum):
+    """Represents the different status of a mandatory relation."""
     NOT_AVAILABLE = "not_available"
     AVAILABLE = "available"
-    CONFIGURED = "configured"
     ERROR = "error"
-
-
-class DPBenchmarkExecStatus(Enum):
-    """Benchmark execution status.
-
-    The state-machine is the following:
-    UNSET -> PREPARED -> RUNNING -> STOPPED -> UNSET
-
-    ERROR can be set after any state apart from UNSET, PREPARED, STOPPED.
-
-    UNSET means waiting for prepare to be executed. STOPPED means the sysbench is ready
-    but the service is not running.
-    """
-
-    UNSET = "unset"
-    PREPARED = "prepared"
-    RUNNING = "running"
-    STOPPED = "stopped"
-    ERROR = "error"
-
-
-class DPBenchmarkIsInWrongStateError(DPBenchmarkError):
-    """DPBenchmark is in wrong state error."""
-
-    def __init__(self, unit_state: DPBenchmarkExecStatus, app_state: DPBenchmarkExecStatus):
-        self.unit_state = unit_state
-        self.app_state = app_state
-        super().__init__(f"Unit state: {unit_state}, App state: {app_state}")
+    READY = "ready"

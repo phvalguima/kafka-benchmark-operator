@@ -31,7 +31,7 @@ from overrides import override
 from pydantic import error_wrappers
 
 from benchmark.base_charm import DPBenchmarkCharmBase
-from benchmark.benchmark_workload_base import DPBenchmarkSystemdService
+from src.benchmark.core.benchmark_workload_base import DPBenchmarkSystemdService
 from benchmark.core.models import (
     DatabaseState,
     DPBenchmarkBaseDatabaseModel,

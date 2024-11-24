@@ -1,7 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""This module contains the benchmark workload service.
+"""This module contains the benchmark workload manager for systemd.
 
 Its implementation follows the WorkloadBase interface. The final workload class
 must implement most of the WorkloadBase methods.
@@ -61,7 +61,7 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
         return os.path.exists(path)
 
 
-class DPBenchmarkSystemdService(WorkloadBase):
+class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
 
     def __init__(self):
