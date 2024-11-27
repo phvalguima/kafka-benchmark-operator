@@ -151,14 +151,14 @@ class OpenSearchDatabaseState(DatabaseState):
         return None
 
 
-class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
+class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
     """Listens to all the DB-related events and react to them.
 
     This class will provide the charm with the necessary data to connect to the DB as
     well as the current relation status.
     """
 
-    DATABASE_KEY = "index"
+    DATABASE_KEY = "topic"
 
     def __init__(
         self,
@@ -179,7 +179,7 @@ class OpenSearchDatabaseRelationHandler(DatabaseRelationHandler):
         )
 
 
-class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
+class OpenMessagingBenchmarkOperator(DPBenchmarkCharmBase):
     """Charm the service."""
 
     def __init__(self, *args):
@@ -212,12 +212,6 @@ class OpenSearchBenchmarkOperator(DPBenchmarkCharmBase):
 
     def _on_start(self, event: EventBase) -> None:
         """Start the service."""
-        # sudo guarantees we are installing this dependency system-wide instead of only
-        # for the charm. It also ensures we are not setting PYTHONPATH, given we have
-        # it set in the charm itself, coming from "./dispatch"
-        subprocess.run("sudo pip3 install opensearch-benchmark", shell=True)
-
-        self.config_manager.render_service_executable()
         self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: EventBase) -> None:

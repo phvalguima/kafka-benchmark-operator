@@ -27,6 +27,37 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 logger = logging.getLogger(__name__)
 
 
+class SosreportCLIArgsModel(BaseModel):
+    """Holds the data specific to connect with the target application."""
+
+    plugins: Optional[list[str]] = []
+    plugin_options: Optional[list[str]] = []
+    batch: bool = True
+    clean: bool = True
+    tmp_dir: Optional[str] = "/tmp"
+    pack: bool = True
+
+    def __str__(self):
+        """Return the string representation of the model."""
+        result = ""
+        if self.plugins:
+            result += "--only-plugins " + \
+                ",".join([x for x in self.plugins]) + \
+                " --enable-plugins " + \
+                ",".join([x for x in self.plugins])
+        if self.plugin_options:
+            result += " ".join([f"-k {opt}" for opt in self.plugin_options])
+        if self.batch:
+            result += " --batch"
+        if self.clean:
+            result += " --clean"
+        if self.tmp_dir:
+            result += f" --tmp-dir {self.tmp_dir}"
+        if self.pack:
+            result += " -z gzip"
+        return result
+
+
 class DPBenchmarkBaseDatabaseModel(BaseModel):
     """Holds the data specific to connect with the target application."""
 

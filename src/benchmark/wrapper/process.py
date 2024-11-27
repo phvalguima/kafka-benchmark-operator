@@ -13,6 +13,8 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 
+from core import WorkloadCLIArgsModel, ProcessModel, BenchmarkMetrics, ProcessStatus
+
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 

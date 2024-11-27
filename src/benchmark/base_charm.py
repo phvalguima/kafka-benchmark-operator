@@ -26,10 +26,11 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0 import apt
+from ops.charm import CharmEvents
+from ops.framework import EventBase, EventSource
 
 from benchmark.core.benchmark_workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
-from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     COS_AGENT_RELATION,
     METRICS_PORT,
@@ -40,6 +41,7 @@ from benchmark.literals import (
     DPBenchmarkServiceError,
     DPBenchmarkUnitNotReadyError,
 )
+from benchmark.core.models import PeerState, DPBenchmarkLifecyclePhase
 from benchmark.managers.config import ConfigManager
 
 # Log messages can be retrieved using juju debug-log
@@ -107,7 +109,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             scrape_configs=self.scrape_config,
         )
 
-        self.workload = WorkloadBase()
         self.config_manager = ConfigManager(
             workload=self.workload,
             database=self.database.state,
@@ -121,6 +122,12 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     #  Install Logic
     #
     ###########################################################################
+
+    @abstractmethod
+    @property
+    def workload(self) -> WorkloadBase:
+        """Workload object."""
+        ...
 
     @abstractmethod
     @property
@@ -302,11 +309,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     def advance_to_next_step(self) -> None:
         """Runs the next step in the benchmark lifecycle."""
         state = PeerState(self.model.unit, PEER_RELATION)
-        if state.lifefcycle == DPBenchmarkLifecyclePhase.UNSET:
+        if state.lifecycle == DPBenchmarkLifecyclePhase.UNSET:
             self.prepare()
-        elif state.lifefcycle == DPBenchmarkLifecyclePhase.AVAILABLE:
+        elif state.lifecycle == DPBenchmarkLifecyclePhase.AVAILABLE:
             self.run()
-        elif state.lifefcycle == DPBenchmarkLifecyclePhase.RUNNING:
+        elif state.lifecycle == DPBenchmarkLifecyclePhase.RUNNING:
             self.stop()
         return
 

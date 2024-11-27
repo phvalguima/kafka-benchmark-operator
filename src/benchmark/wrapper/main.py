@@ -8,6 +8,7 @@ import argparse
 import signal
 
 from prometheus_client import start_http_server
+from core import WorkloadCLIArgsModel, WorkloadToProcessMapping
 
 
 def main(args: WorkloadCLIArgsModel):
@@ -34,17 +35,15 @@ if __name__ == "__main__":
     parser.add_argument("--command", type=str, help="Command to be executed", default="run")
     parser.add_argument("--target_hosts", type=str, help="comma-separated list of target hosts")
     parser.add_argument("--workload", type=str, help="Name of the workload to be executed")
+    parser.add_argument("--report_interval", type=int, default=10)
+    parser.add_argument("--parallel_processes", type=int, default=1)
     parser.add_argument("--threads", type=int, default=1)
-    parser.add_argument("--clients", type=int, default=16)
     parser.add_argument("--db_user", type=str)
     parser.add_argument("--db_password", type=str)
     parser.add_argument("--duration", type=int, default=0)
-    parser.add_argument("--workload_params", type=str, default=None)
+    parser.add_argument("--run_count", type=int, default=1)
     parser.add_argument(
         "--extra_labels", type=str, help="comma-separated list of extra labels to be used.", default=""
-    )
-    parser.add_argument(
-        "--test_mode", action='store_true', help="Whether to run in test mode",
     )
 
     args = parser.parse_args()

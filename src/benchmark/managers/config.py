@@ -65,7 +65,7 @@ class ConfigManager:
     ) -> bool:
         """Prepare the benchmark service."""
         try:
-            self.render_workload_parameters(
+            self.render_workload_params(
                 workload_name=workload_name,
             )
             if not self.render_service_file(
@@ -103,11 +103,9 @@ class ConfigManager:
             "db_user": db.db_info.username,
             "db_password": db.db_info.password,
             "duration": db.duration,
-            "workload_params": self.workload.paths.workload_parameters,
+            "workload_params": self.workload.paths.workload_params,
             "extra_labels": labels,
         }
-        if db.extra:
-            config["extra_config"] = db.extra
         self._render(
             self.workload.paths.svc_name + ".service.j2",
             config,
@@ -115,7 +113,7 @@ class ConfigManager:
         )
         return daemon_reload()
 
-    def render_workload_parameters(
+    def render_workload_params(
         self,
         workload_name: str,
     ):
@@ -123,7 +121,7 @@ class ConfigManager:
         self._render(
             "workload_parameter/" + workload_name + ".json.j2",
             self.get_execution_options(),
-            self.workload.paths.workload_parameters,
+            self.workload.paths.workload_params,
         )
 
     def _render(
@@ -149,7 +147,7 @@ class ConfigManager:
             if not self.workload.stop():
                 return False
             os.remove(self.workload.paths.service)
-            os.remove(self.workload.paths.workload_parameters)
+            os.remove(self.workload.paths.workload_params)
             if not daemon_reload():
                 return False
         except Exception:

@@ -19,7 +19,7 @@ from overrides import override
 
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.literals import (
-    BenchmarkServiceState,
+    DPBenchmarkServiceState,
 )
 
 
@@ -43,7 +43,7 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
 
     @property
     @override
-    def workload_parameters(self) -> str:
+    def workload_params(self) -> str:
         """The path to the workload parameters folder."""
         if not self.exists("/root/.benchmark/charmed_parameters"):
             os.makedirs("/root/.benchmark/charmed_parameters", exist_ok=True)
@@ -83,7 +83,7 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     @override
     def active(self) -> bool:
         """Checks that the workload is active."""
-        return self.check_service() == BenchmarkServiceState.RUNNING
+        return self.check_service() == DPBenchmarkServiceState.RUNNING
 
     @override
     def read(self, path: str) -> list[str]:
@@ -112,19 +112,23 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
             f.write(content)
             os.chmod(path, 0o640)
 
+    def is_running_on_k8s(self) -> bool:
+        """Returns True if running on k8s env."""
+        return False
+
     @override
-    def check_service(self) -> BenchmarkServiceState:
+    def check_service(self) -> DPBenchmarkServiceState:
         """Check the systemd status.
 
         This proxy method captures the external exception and re-raises as adequate for the benchmark.
         """
         if not self.paths.exists(self.paths.service):
-            return BenchmarkServiceState.NOT_PRESENT
+            return DPBenchmarkServiceState.NOT_PRESENT
         if service_failed(self.paths.svc_name):
-            return BenchmarkServiceState.FAILED
+            return DPBenchmarkServiceState.FAILED
         if service_running(self.paths.svc_name):
-            return BenchmarkServiceState.RUNNING
-        return BenchmarkServiceState.AVAILABLE
+            return DPBenchmarkServiceState.RUNNING
+        return DPBenchmarkServiceState.AVAILABLE
 
     @override
     def exec(

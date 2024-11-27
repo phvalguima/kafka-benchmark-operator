@@ -25,8 +25,19 @@ class WorkloadTemplatePaths(ABC):
 
     @property
     @abstractmethod
-    def workload_parameters(self) -> str:
+    def workload_params(self) -> str:
         """The path to the workload parameters file."""
+        ...
+
+    @property
+    def workload_params_template(self) -> str:
+        """The path to the workload parameters template."""
+        ...
+
+    @property
+    @abstractmethod
+    def results(self) -> str:
+        """The path to the results folder."""
         ...
 
     @abstractmethod
@@ -46,6 +57,7 @@ class WorkloadBase(ABC):
 
     paths: WorkloadTemplatePaths
 
+    @abstractmethod
     def install(self) -> None:
         """Installs the workload."""
         ...
@@ -85,6 +97,11 @@ class WorkloadBase(ABC):
             path: the full filepath to write to
             mode: the write mode. Usually "w" for write, or "a" for append. Default "w"
         """
+        ...
+
+    @abstractmethod
+    def is_running_on_k8s(self) -> bool:
+        """Returns True if running on k8s env."""
         ...
 
     @abstractmethod

@@ -71,11 +71,11 @@ class DPBenchmarkLifecyclePhase(StrEnum):
     * AVAILABLE: the service is present and ready to be started
     * RUNNING: the service is running
     * FAILED: the service has failed
-    * COLLECTING: the service is collecting data
+    * COLLECTING: the service is collecting data and will store it locally in a tarball
     * UPLOADING: once the RUNNING phase is finished, it moves to "UPLOADING" whilst the data is
                  copied to the S3 endpoint
     * FINISHED: the service has finished
-    * STOPPED: the service has been stopped by the user
+    * STOPPED: the user explicitly demanded to stop the service
     """
     UNSET = "unset"
     AVAILABLE = "available"
