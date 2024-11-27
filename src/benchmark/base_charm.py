@@ -14,22 +14,27 @@ the user.
 This charm should also be the main entry point to all the modelling of your benchmark tool.
 """
 
-from abc import ABC, abstractmethod
 import logging
 import subprocess
+from abc import ABC, abstractmethod
 from typing import Any
 
 import ops
-from ops.model import ModelError, NameError
-from ops.framework import EventBase
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from charms.operator_libs_linux.v0 import apt
 from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    MaintenanceStatus,
+    ModelError,
+    NameError,
+    WaitingStatus,
+)
 
 from benchmark.core.benchmark_workload_base import WorkloadBase
+from benchmark.core.models import DPBenchmarkLifecyclePhase, PeerState
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.literals import (
     COS_AGENT_RELATION,
@@ -41,7 +46,6 @@ from benchmark.literals import (
     DPBenchmarkServiceError,
     DPBenchmarkUnitNotReadyError,
 )
-from benchmark.core.models import PeerState, DPBenchmarkLifecyclePhase
 from benchmark.managers.config import ConfigManager
 
 # Log messages can be retrieved using juju debug-log
@@ -83,17 +87,21 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         # Peer relation endpoints
         self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_joined, self._on_peer_changed,
+            self.charm.on[PEER_RELATION].relation_joined,
+            self._on_peer_changed,
         )
         self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_changed, self._on_peer_changed,
+            self.charm.on[PEER_RELATION].relation_changed,
+            self._on_peer_changed,
         )
         self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_broken, self._on_peer_changed,
+            self.charm.on[PEER_RELATION].relation_broken,
+            self._on_peer_changed,
         )
 
         self.framework.observe(
-            self.charm.on.check_upload, self._on_check_upload,
+            self.charm.on.check_upload,
+            self._on_check_upload,
         )
 
         self.database = DatabaseRelationHandler(self, db_relation_name)
@@ -139,7 +147,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         """
         ...
 
-    def _deb_attached_as_resource(self) -> str|None:
+    def _deb_attached_as_resource(self) -> str | None:
         """Checks whether DEB package is attached to the charm or not.
 
         Returns:
@@ -165,7 +173,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         apt.add_package(deps)
         try:
             apt.add_package(package)
-        except apt.PackageError as e:
+        except apt.PackageError:
             self.unit.status = MaintenanceStatus("Checking resources...")
             deb = self._deb_attached_as_resource()
             if not deb:
@@ -196,10 +204,13 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self_state = PeerState(self.model.unit, PEER_RELATION)
         # Check if our own lifecycle phase differs from the peer's
         for unit in self.model.get_relation(PEER_RELATION).units:
-            if self._compare_lifecycle_phases(
-                self_state.get(),
-                PeerState(unit, PEER_RELATION).get(),
-            ) > 0:
+            if (
+                self._compare_lifecycle_phases(
+                    self_state.get(),
+                    PeerState(unit, PEER_RELATION).get(),
+                )
+                > 0
+            ):
                 # We have a unit in a more advanced status.
                 # We must process the next step
                 self.advance_to_next_step()
@@ -430,14 +441,16 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         """Current unit ip."""
         return self.model.get_binding(PEER_RELATION).network.bind_address
 
-    def _compare_lifecycle_phases(self, A: DPBenchmarkLifecyclePhase, B: DPBenchmarkLifecyclePhase) -> int:
+    def _compare_lifecycle_phases(
+        self, left: DPBenchmarkLifecyclePhase, right: DPBenchmarkLifecyclePhase
+    ) -> int:
         """Compare the lifecycle, if the unit A is more advanced than unit B or vice-versa.
 
-        if A == B, return 0
-        if A > B, return POSITIVE
-        if A < B, return NEGATIVE
+        if left == right, return 0
+        if left > right, return POSITIVE
+        if left < right, return NEGATIVE
         """
-        if A == B:
+        if left == right:
             return 0
 
         def _get_value(phase: DPBenchmarkLifecyclePhase) -> int:
@@ -447,20 +460,20 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
                 return 1
             if phase == DPBenchmarkLifecyclePhase.RUNNING:
                 return 2
-            # Ignore a failed case as we do not have any iteraction between units
+            # Ignore a failed case as we do not have any iteration between units
             # if phase == DPBenchmarkLifecyclePhase.FAILED:
             #     return 3
-            # Ignore an collecting case as we do not have any iteraction between units
+            # Ignore an collecting case as we do not have any iteration between units
             # if phase == DPBenchmarkLifecyclePhase.COLLECTING:
             #     return 4
-            # Ignore an uploading case as we do not have any iteraction between units
+            # Ignore an uploading case as we do not have any iteration between units
             # if phase == DPBenchmarkLifecyclePhase.UPLOADING:
             #     return 5
-            # Ignore a finished case as we do not have any iteraction between units
+            # Ignore a finished case as we do not have any iteration between units
             # if phase == DPBenchmarkLifecyclePhase.FINISHED:
             #     return 6
             if phase == DPBenchmarkLifecyclePhase.STOPPED:
                 return 7
             return -1
 
-        return _get_value(A) - _get_value(B)
+        return _get_value(left) - _get_value(right)

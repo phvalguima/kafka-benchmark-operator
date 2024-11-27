@@ -77,6 +77,7 @@ class DPBenchmarkLifecyclePhase(StrEnum):
     * FINISHED: the service has finished
     * STOPPED: the user explicitly demanded to stop the service
     """
+
     UNSET = "unset"
     AVAILABLE = "available"
     RUNNING = "running"
@@ -89,6 +90,7 @@ class DPBenchmarkLifecyclePhase(StrEnum):
 
 class DPBenchmarkServiceState(StrEnum):
     """Represents the different states of the benchmark service."""
+
     RUNNING = "running"
     STOPPED = "stopped"
     FAILED = "failed"
@@ -96,6 +98,7 @@ class DPBenchmarkServiceState(StrEnum):
 
 class DPBenchmarkRelationLifecycle(StrEnum):
     """Represents the different status of a mandatory relation."""
+
     NOT_AVAILABLE = "not_available"
     AVAILABLE = "available"
     ERROR = "error"

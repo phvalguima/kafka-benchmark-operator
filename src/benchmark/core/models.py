@@ -41,10 +41,12 @@ class SosreportCLIArgsModel(BaseModel):
         """Return the string representation of the model."""
         result = ""
         if self.plugins:
-            result += "--only-plugins " + \
-                ",".join([x for x in self.plugins]) + \
-                " --enable-plugins " + \
-                ",".join([x for x in self.plugins])
+            result += (
+                "--only-plugins "
+                + ",".join(x for x in self.plugins)
+                + " --enable-plugins "
+                + ",".join(x for x in self.plugins)
+            )
         if self.plugin_options:
             result += " ".join([f"-k {opt}" for opt in self.plugin_options])
         if self.batch:
@@ -93,6 +95,7 @@ class DPBenchmarkConfigModelBase(BaseModel):
     This class is abstract as each benchmark charm must inherit from it and provide the
     necessary implementation.
     """
+
     workload_profile: str = "default"
 
 
@@ -102,6 +105,7 @@ class DPBenchmarkWrapperModel(BaseModel):
     This class contains all the config info needed to pass to the benchmark tool wrapper,
     that will be managing the workload.
     """
+
     test_name: str
     parallel_processes: int
     threads: int
@@ -175,25 +179,30 @@ class PeerState(RelationState):
         )
 
     def get(self) -> Any:
+        """Returns the value of the key."""
         return self.relation_data.get(
             self.LIFECYCLE_KEY,
             None,
         )
 
     @property
-    def lifecycle(self) -> DPBenchmarkLifecyclePhase|None:
+    def lifecycle(self) -> DPBenchmarkLifecyclePhase | None:
+        """Returns the value of the lifecycle key."""
         return self.get(self.LIFECYCLE_KEY)
 
     @lifecycle.setter
     def lifecycle(self, status: DPBenchmarkLifecyclePhase):
+        """Sets the lifecycle key value."""
         self.set({self.LIFECYCLE_KEY: status})
 
     @property
     def stop(self) -> bool:
-        self.relation_data.get(self.STOP_KEY, False)
+        """Returns the value of the stop key."""
+        return self.relation_data.get(self.STOP_KEY, False)
 
     @stop.setter
     def stop(self, switch: bool) -> bool:
+        """Toggles the stop key value."""
         self.set({self.STOP_KEY: switch})
 
 

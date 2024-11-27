@@ -5,6 +5,7 @@
 
 This class runs all the collection tasks for a given result.
 """
+
 from benchmark.core.models import SosreportCLIArgsModel
 from benchmark.core.workload_base import WorkloadBase
 
@@ -15,7 +16,7 @@ class CollectorManager:
     def __init__(
         self,
         workload: WorkloadBase,
-        sosreport_config: SosreportCLIArgsModel|None = None,        
+        sosreport_config: SosreportCLIArgsModel | None = None,
     ):
         # TODO: we need a way to run "sos collect"
         # For that, we will have to manage ssh keys between the peers

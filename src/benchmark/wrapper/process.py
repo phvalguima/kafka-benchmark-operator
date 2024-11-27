@@ -6,15 +6,15 @@
 Normally, this deployment will be composed of several processes doing either the
 same task or running different tasks at once.
 """
+
 import asyncio
-import time
 import logging
 import os
 import subprocess
+import time
 from abc import ABC, abstractmethod
 
-from core import WorkloadCLIArgsModel, ProcessModel, BenchmarkMetrics, ProcessStatus
-
+from core import BenchmarkMetrics, ProcessModel, ProcessStatus, WorkloadCLIArgsModel
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
@@ -32,6 +32,7 @@ class BenchmarkProcess(ABC):
     metrics that need to be uploaded to Prometheus OR when the output is just a log
     line to keep track of the information.
     """
+
     def __init__(
         self,
         model: ProcessModel,
@@ -46,14 +47,14 @@ class BenchmarkProcess(ABC):
     def start(self):
         """Start the process."""
         self.process = subprocess.Popen(
-                self.model.cmd.split(),
-                user=self.model.uid,
-                group=self.model.gid,
-                stdin=None,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-            )
+            self.model.cmd.split(),
+            user=self.model.uid,
+            group=self.model.gid,
+            stdin=None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
         # Now, let's make stdout a non-blocking file
         os.set_blocking(self.process.stdout.fileno(), blocking=False)
 
@@ -80,7 +81,7 @@ class BenchmarkProcess(ABC):
         finish_time = initial_time + self.args.duration
 
         for line in iter(self.process.stdout.readline, ""):
-            if (output := self.process_line(line)):
+            if output := self.process_line(line):
                 self.metrics.add(output)
 
             # Log the output.
@@ -88,7 +89,7 @@ class BenchmarkProcess(ABC):
             # some of the metrics will be readily available without COS.
             logger.info(line)
 
-            if (int(time.time()) >= finish_time and self.args.duration != 0):
+            if int(time.time()) >= finish_time and self.args.duration != 0:
                 # duration is over, finish the process() call
                 if auto_stop and self.status() == ProcessStatus.RUNNING:
                     self.stop()
@@ -108,12 +109,14 @@ class BenchmarkProcess(ABC):
         self.model.status = ProcessStatus.STOPPED
 
     @abstractmethod
-    def process_line(self, line: str) -> str|None:
+    def process_line(self, line: str) -> str | None:
+        """Process the output of the process."""
         ...
 
 
 class BenchmarkManager(BenchmarkProcess):
     """This class is in charge of managing all the processes in the run."""
+
     def __init__(
         self,
         model: ProcessModel,
@@ -137,11 +140,10 @@ class BenchmarkManager(BenchmarkProcess):
 
     def all_running(self) -> bool:
         """Check if all the workers are running."""
-        return all(
-            [
-                w.status() == ProcessStatus.RUNNING for w in self.workers
-            ]
-        ) and self.status() == ProcessStatus.RUNNING
+        return (
+            all(w.status() == ProcessStatus.RUNNING for w in self.workers)
+            and self.status() == ProcessStatus.RUNNING
+        )
 
     def start(self):
         """Start the benchmark tool."""
@@ -173,16 +175,16 @@ class WorkloadToProcessMapping(ABC):
         ...
 
     @abstractmethod
-    def _map_prepare(self) -> tuple[BenchmarkManager, list[BenchmarkProcess]|None]:
+    def _map_prepare(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the prepare phase."""
         ...
 
     @abstractmethod
-    def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess]|None]:
+    def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
         ...
 
     @abstractmethod
-    def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess]|None]:
+    def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the clean phase."""
         ...

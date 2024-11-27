@@ -7,8 +7,8 @@
 import argparse
 import signal
 
-from prometheus_client import start_http_server
 from core import WorkloadCLIArgsModel, WorkloadToProcessMapping
+from prometheus_client import start_http_server
 
 
 def main(args: WorkloadCLIArgsModel):
@@ -43,7 +43,10 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=int, default=0)
     parser.add_argument("--run_count", type=int, default=1)
     parser.add_argument(
-        "--extra_labels", type=str, help="comma-separated list of extra labels to be used.", default=""
+        "--extra_labels",
+        type=str,
+        help="comma-separated list of extra labels to be used.",
+        default="",
     )
 
     args = parser.parse_args()

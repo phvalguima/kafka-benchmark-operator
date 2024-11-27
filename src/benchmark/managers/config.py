@@ -79,7 +79,8 @@ class ConfigManager:
     def render_service_executable(self) -> bool:
         """Render the benchmark service executable."""
         shutil.copyfile(
-            "templates/" + self.workload.paths.svc_name + ".py", self.workload.paths.benchmark_wrapper
+            "templates/" + self.workload.paths.svc_name + ".py",
+            self.workload.paths.benchmark_wrapper,
         )
         os.chmod(
             self.workload.paths.benchmark_wrapper,

@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from benchmark.literals import BenchmarkServiceState
+from benchmark.literals import DPBenchmarkServiceState
 
 
 class WorkloadTemplatePaths(ABC):
@@ -120,7 +120,7 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
-    def check_service(self) -> BenchmarkServiceState:
+    def check_service(self) -> DPBenchmarkServiceState:
         """Checks if the workload service is running."""
         ...
 
@@ -128,13 +128,13 @@ class WorkloadBase(ABC):
         """Checks if the benchmark service has passed its "prepare" status."""
         return (
             self.paths.exists(self.paths.benchmark_wrapper)
-            and self.paths.exists(self.paths.workload_parameters)
+            and self.paths.exists(self.paths.workload_params)
             and self.paths.exists(self.paths.service)
         )
 
     def is_running(self) -> bool:
         """Checks if the benchmark service is running."""
-        return self.is_prepared() and self.check_service() == BenchmarkServiceState.RUNNING
+        return self.is_prepared() and self.check_service() == DPBenchmarkServiceState.RUNNING
 
     def is_stopped(self) -> bool:
         """Checks if the benchmark service has stopped."""
@@ -147,4 +147,4 @@ class WorkloadBase(ABC):
 
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""
-        return self.is_prepared() and self.check_service() == BenchmarkServiceState.FAILED
+        return self.is_prepared() and self.check_service() == DPBenchmarkServiceState.FAILED
