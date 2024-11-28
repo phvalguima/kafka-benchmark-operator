@@ -42,32 +42,32 @@ class BenchmarkProcess(ABC):
         self.model = model
         self.metrics = metrics
         self.args = args
-        self.process = None
+        self._proc = None
 
     def start(self):
         """Start the process."""
-        self.process = subprocess.Popen(
-            self.model.cmd.split(),
-            user=self.model.uid,
-            group=self.model.gid,
+        self._proc = subprocess.Popen(
+            self.model.cmd,
+            user=self.model.user,
+            group=self.model.group,
             stdin=None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
+            shell=True,
         )
         # Now, let's make stdout a non-blocking file
-        os.set_blocking(self.process.stdout.fileno(), blocking=False)
+        os.set_blocking(self._proc.stdout.fileno(), False)
 
-        self.model.pid = self.process.pid
+        self.model.pid = self._proc.pid
         self.model.status = ProcessStatus.RUNNING
-        return self.process
 
     def status(self) -> ProcessStatus:
         """Return the status of the process."""
         stat = ProcessStatus.STOPPED
-        if self.process.poll() is None:
+        if self._proc.poll() is None:
             stat = ProcessStatus.RUNNING
-        if self.process.returncode != 0:
+        elif self._proc.returncode != 0:
             stat = ProcessStatus.ERROR
         self.model.status = stat
         return stat
@@ -80,30 +80,46 @@ class BenchmarkProcess(ABC):
         initial_time = int(time.time())
         finish_time = initial_time + self.args.duration
 
-        for line in iter(self.process.stdout.readline, ""):
-            if output := self.process_line(line):
-                self.metrics.add(output)
+        run_count = 0
+        while (
+            (run_count < self.args.run_count and self.args.run_count != 0)
+            or (int(time.time()) >= finish_time and self.args.duration != 0)
+            or (self.status() == ProcessStatus.RUNNING and self.args.duration == 0)
+        ):
+            to_wait = True
+            for line in iter(self._proc.stdout.readline, ""):
+                if output := self.process_line(line):
+                    self.metrics.add(output)
 
-            # Log the output.
-            # This way, an user can see what the process is doing and
-            # some of the metrics will be readily available without COS.
-            logger.info(line)
+                # Log the output.
+                # This way, an user can see what the process is doing and
+                # some of the metrics will be readily available without COS.
+                logger.info(line)
 
-            if int(time.time()) >= finish_time and self.args.duration != 0:
-                # duration is over, finish the process() call
-                if auto_stop and self.status() == ProcessStatus.RUNNING:
-                    self.stop()
-                break
+                if self.status() != ProcessStatus.RUNNING:
+                    # Process has finished
+                    break
 
-            if self.status() != ProcessStatus.RUNNING:
-                # Process has finished
-                break
-            await asyncio.sleep(self.args.report_interval)
+                await asyncio.sleep(self.args.report_interval)
+                to_wait = False
+
+            if to_wait:
+                # In case the stdout is empty, we ensure we sleep anyways
+                await asyncio.sleep(self.args.report_interval)
+
+            # If we are considering the
+            if self.status() != ProcessStatus.RUNNING and self.args.run_count:
+                # Increase the run count
+                run_count += 1
+
+        # Now we are finished, check if we need to stop the process
+        if auto_stop and self.status() == ProcessStatus.RUNNING:
+            self.stop()
 
     def stop(self):
         """Stop the process."""
         try:
-            self.process.kill()
+            self._proc.kill()
         except Exception as e:
             logger.warning(f"Error stopping worker: {e}")
         self.model.status = ProcessStatus.STOPPED

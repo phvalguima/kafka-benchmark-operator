@@ -33,8 +33,8 @@ class ProcessModel(BaseModel):
     cmd: str
     pid: int = -1
     status: str = ProcessStatus.TO_START
-    user: str
-    group: str
+    user: str | None = None
+    group: str | None = None
 
 
 class MetricOptionsModel(BaseModel):

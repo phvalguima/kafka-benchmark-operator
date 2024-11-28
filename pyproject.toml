@@ -19,6 +19,7 @@ shortuuid = "1.0.13"
 pydantic = "^1.10.18, <2"
 cryptography = "^43.0.1"
 jsonschema = "^4.23.0"
+prometheus-client = ">=0.19.0"
 
 
 [tool.poetry.group.charm-libs.dependencies]
