@@ -8,6 +8,11 @@ from enum import StrEnum
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
+# Peer relation keys
+LIFECYCLE_KEY = "lifecycle"
+STOP_KEY = "stop"
+
+
 class Substrate(StrEnum):
     """Substrate of the benchmark."""
 
@@ -63,22 +68,23 @@ class DPBenchmarkDBRelationNotAvailableError(DPBenchmarkError):
     """Sysbench failed to execute a command."""
 
 
-class DPBenchmarkLifecyclePhase(StrEnum):
+class DPBenchmarkLifecycleState(StrEnum):
     """Benchmark lifecycle representation.
 
     The status are:
     * UNSET: the service is not set yet
+    * PREPARING: the service is uploading data to the database in its "prepare" phase
     * AVAILABLE: the service is present and ready to be started
     * RUNNING: the service is running
     * FAILED: the service has failed
-    * COLLECTING: the service is collecting data and will store it locally in a tarball
+    * COLLECTING: the service is collecting data
     * UPLOADING: once the RUNNING phase is finished, it moves to "UPLOADING" whilst the data is
                  copied to the S3 endpoint
     * FINISHED: the service has finished
-    * STOPPED: the user explicitly demanded to stop the service
+    * STOPPED: the service has been stopped by the user
     """
-
     UNSET = "unset"
+    PREPARING = "preparing"
     AVAILABLE = "available"
     RUNNING = "running"
     FAILED = "failed"

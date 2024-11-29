@@ -129,13 +129,3 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
         if service_running(self.paths.svc_name):
             return DPBenchmarkServiceState.RUNNING
         return DPBenchmarkServiceState.AVAILABLE
-
-    @override
-    def exec(
-        self,
-        command: list[str] | str,
-        env: dict[str, str] | None = None,
-        working_dir: str | None = None,
-    ) -> str:
-        """Executes a command on the workload substrate."""
-        pass

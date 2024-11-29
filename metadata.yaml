@@ -28,10 +28,3 @@ requires:
   kafka:
     interface: kafka_client
     limit: 1
-
-resources:
-  benchmark-deb:
-    type: file
-    filename: benchmark.deb
-    description: |
-      Tarball file used to install kafka instead of packages

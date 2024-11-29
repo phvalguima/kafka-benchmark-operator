@@ -23,7 +23,6 @@ from benchmark.core.workload_base import WorkloadBase
 
 
 class ConfigManager:
-    """The config manager class."""
 
     def __init__(
         self,
@@ -64,6 +63,18 @@ class ConfigManager:
         labels: Optional[str] = "",
     ) -> bool:
         """Prepare the benchmark service."""
+        ...
+
+
+class SystemdConfigManager(ConfigManager):
+    """The config manager for systemd class."""
+
+    def prepare(
+        self,
+        workload_name: str,
+        labels: Optional[str] = "",
+    ) -> bool:
+        """Prepare the benchmark service."""
         try:
             self.render_workload_params(
                 workload_name=workload_name,
@@ -75,17 +86,6 @@ class ConfigManager:
         except Exception:
             return False
         return True
-
-    def render_service_executable(self) -> bool:
-        """Render the benchmark service executable."""
-        shutil.copyfile(
-            "templates/" + self.workload.paths.svc_name + ".py",
-            self.workload.paths.benchmark_wrapper,
-        )
-        os.chmod(
-            self.workload.paths.benchmark_wrapper,
-            0o755,
-        )
 
     def render_service_file(
         self,

@@ -15,6 +15,8 @@ class BenchmarkCommand(StrEnum):
     PREPARE = "prepare"
     RUN = "run"
     STOP = "stop"
+    COLLECT = "collect"
+    UPLOAD = "upload"
     CLEANUP = "cleanup"
 
 

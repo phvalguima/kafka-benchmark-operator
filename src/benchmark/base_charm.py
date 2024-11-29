@@ -15,27 +15,24 @@ This charm should also be the main entry point to all the modelling of your benc
 """
 
 import logging
-import subprocess
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from charms.operator_libs_linux.v0 import apt
 from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
     MaintenanceStatus,
-    ModelError,
-    NameError,
     WaitingStatus,
 )
 
 from benchmark.core.benchmark_workload_base import WorkloadBase
-from benchmark.core.models import DPBenchmarkLifecyclePhase, PeerState
+from benchmark.core.models import DPBenchmarkLifecycleState, PeerState
 from benchmark.events.db import DatabaseRelationHandler
+from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     COS_AGENT_RELATION,
     METRICS_PORT,
@@ -47,6 +44,7 @@ from benchmark.literals import (
     DPBenchmarkUnitNotReadyError,
 )
 from benchmark.managers.config import ConfigManager
+from benchmark.managers.lifecycle import LifecycleManager
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -103,9 +101,18 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             self.charm.on.check_upload,
             self._on_check_upload,
         )
+        self.framework.observe(
+            self.charm.on.check_collect,
+            self._on_check_collect,
+        )
 
         self.database = DatabaseRelationHandler(self, db_relation_name)
+        self.peers = PeerRelationHandler(self, PEER_RELATION)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
+
+        self.workload = workload_builder()
+
+        self.lifecycle = LifecycleManager(self.peers, self.workload)
 
         self._grafana_agent = COSAgentProvider(
             self,
@@ -127,93 +134,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     ###########################################################################
     #
-    #  Install Logic
-    #
-    ###########################################################################
-
-    @abstractmethod
-    @property
-    def workload(self) -> WorkloadBase:
-        """Workload object."""
-        ...
-
-    @abstractmethod
-    @property
-    def workload_packages(self) -> tuple[list[str], str]:
-        """Packages needed for the benchmark.
-
-        Returns:
-            a tuple with package dependencies and the name of the package.
-        """
-        ...
-
-    def _deb_attached_as_resource(self) -> str | None:
-        """Checks whether DEB package is attached to the charm or not.
-
-        Returns:
-            a boolean representing whether DEB is attached as a resource or not.
-        """
-        try:
-            return self._charm.model.resources.fetch(self.RESOURCE_DEB_NAME)
-        except ModelError:
-            return None
-        except NameError as e:
-            if "invalid resource name" in str(e):
-                return None
-            raise
-
-    def _install_packages(self) -> None:
-        """Install the packages needed for the benchmark."""
-        self.unit.status = MaintenanceStatus("Installing apt packages...")
-        apt.update()
-        # Install any extra packages that are needed
-        deps, package = self.workload_packages
-        # Run the dependencies installation outside of the try-catch.
-        # We will not have an alternative if that list fails to install.
-        apt.add_package(deps)
-        try:
-            apt.add_package(package)
-        except apt.PackageError:
-            self.unit.status = MaintenanceStatus("Checking resources...")
-            deb = self._deb_attached_as_resource()
-            if not deb:
-                raise
-            self.unit.status = MaintenanceStatus("Installing local DEB package...")
-            # Install it directly instead of calling apt.add_package or any other methods
-            # They will double-check the package on cache and fail again
-            subprocess.check_output(["apt", "install", "-y", deb])
-        self.unit.status = ActiveStatus()
-
-    def _on_install(self, event: EventBase) -> None:
-        """Installs the basic packages and python dependencies.
-
-        No exceptions are captured as we need all the dependencies below to even start running.
-        """
-        self.unit.status = MaintenanceStatus("Installing...")
-        self.config_manager.render_service_executable()
-        self.unit.status = ActiveStatus()
-
-    ###########################################################################
-    #
     #  Charm Event Handlers and Internals
     #
     ###########################################################################
-
-    def _on_peer_changed(self, event: EventBase) -> None:
-        """Peer relation changed event."""
-        self_state = PeerState(self.model.unit, PEER_RELATION)
-        # Check if our own lifecycle phase differs from the peer's
-        for unit in self.model.get_relation(PEER_RELATION).units:
-            if (
-                self._compare_lifecycle_phases(
-                    self_state.get(),
-                    PeerState(unit, PEER_RELATION).get(),
-                )
-                > 0
-            ):
-                # We have a unit in a more advanced status.
-                # We must process the next step
-                self.advance_to_next_step()
 
     def _on_check_collect(self, event: EventBase) -> None:
         """Check if the upload is finished."""
@@ -223,11 +146,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return
 
         if self.unit.is_leader():
-            PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.UPLOADING)
+            PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.UPLOADING)
             # Raise we are running an upload and we will check the status later
             self.on.check_upload.emit()
             return
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.FINISHED)
+        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.FINISHED)
 
     def _on_check_upload(self, event: EventBase) -> None:
         """Check if the upload is finished."""
@@ -235,7 +158,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             # Nothing to do, upload is still in progress
             event.defer()
             return
-        PeerState(self.model.unit, PEER_RELATION).lifecycle = DPBenchmarkLifecyclePhase.FINISHED
+        PeerState(self.model.unit, PEER_RELATION).lifecycle = DPBenchmarkLifecycleState.FINISHED
 
     def _on_update_status(self, event: EventBase) -> None:
         """Set status for the operator and finishes the service.
@@ -317,14 +240,20 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     #
     ###########################################################################
 
+    def lifecycle_update(self):
+        """Update the lifecycle of the benchmark."""
+        next = self.lifecycle.next()
+        if next == DPBenchmarkLifecycleState.UNSET:
+            self.advance_to_next_step()
+
     def advance_to_next_step(self) -> None:
         """Runs the next step in the benchmark lifecycle."""
         state = PeerState(self.model.unit, PEER_RELATION)
-        if state.lifecycle == DPBenchmarkLifecyclePhase.UNSET:
+        if state.lifecycle == DPBenchmarkLifecycleState.UNSET:
             self.prepare()
-        elif state.lifecycle == DPBenchmarkLifecyclePhase.AVAILABLE:
+        elif state.lifecycle == DPBenchmarkLifecycleState.AVAILABLE:
             self.run()
-        elif state.lifecycle == DPBenchmarkLifecyclePhase.RUNNING:
+        elif state.lifecycle == DPBenchmarkLifecycleState.RUNNING:
             self.stop()
         return
 
@@ -359,7 +288,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             labels=self.labels,
         ):
             raise DPBenchmarkExecError()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.AVAILABLE)
+        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.AVAILABLE)
 
     def on_run_action(self, event: EventBase) -> None:
         """Run benchmark action."""
@@ -379,7 +308,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self.workload.is_prepared():
             raise DPBenchmarkUnitNotReadyError()
         self.workload.restart()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.RUNNING)
+        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.RUNNING)
 
     def on_stop_action(self, event: EventBase) -> None:
         """Stop benchmark service."""
@@ -400,7 +329,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         # Mark it as stopped
         PeerState(self.model.unit, PEER_RELATION).stop()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.COLLECTING)
+        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.COLLECTING)
         self.on.check_collect.emit()
 
     def on_clean_action(self, event: EventBase) -> None:
@@ -429,7 +358,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if self.unit.is_leader():
             self.workload.exec("clean", self.labels)
         self.config_manager.unset()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecyclePhase.UNSET)
+        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.UNSET)
 
     ###########################################################################
     #
@@ -440,40 +369,3 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     def _unit_ip(self) -> str:
         """Current unit ip."""
         return self.model.get_binding(PEER_RELATION).network.bind_address
-
-    def _compare_lifecycle_phases(
-        self, left: DPBenchmarkLifecyclePhase, right: DPBenchmarkLifecyclePhase
-    ) -> int:
-        """Compare the lifecycle, if the unit A is more advanced than unit B or vice-versa.
-
-        if left == right, return 0
-        if left > right, return POSITIVE
-        if left < right, return NEGATIVE
-        """
-        if left == right:
-            return 0
-
-        def _get_value(phase: DPBenchmarkLifecyclePhase) -> int:
-            if phase == DPBenchmarkLifecyclePhase.UNSET:
-                return 0
-            if phase == DPBenchmarkLifecyclePhase.AVAILABLE:
-                return 1
-            if phase == DPBenchmarkLifecyclePhase.RUNNING:
-                return 2
-            # Ignore a failed case as we do not have any iteration between units
-            # if phase == DPBenchmarkLifecyclePhase.FAILED:
-            #     return 3
-            # Ignore an collecting case as we do not have any iteration between units
-            # if phase == DPBenchmarkLifecyclePhase.COLLECTING:
-            #     return 4
-            # Ignore an uploading case as we do not have any iteration between units
-            # if phase == DPBenchmarkLifecyclePhase.UPLOADING:
-            #     return 5
-            # Ignore a finished case as we do not have any iteration between units
-            # if phase == DPBenchmarkLifecyclePhase.FINISHED:
-            #     return 6
-            if phase == DPBenchmarkLifecyclePhase.STOPPED:
-                return 7
-            return -1
-
-        return _get_value(left) - _get_value(right)

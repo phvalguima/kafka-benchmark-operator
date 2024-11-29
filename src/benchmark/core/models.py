@@ -15,10 +15,12 @@ from ops.model import Application, Relation, Unit
 from pydantic import BaseModel, error_wrappers, root_validator
 
 from benchmark.literals import (
-    DPBenchmarkLifecyclePhase,
+    DPBenchmarkLifecycleState,
     DPBenchmarkMissingOptionsError,
     Scope,
     Substrate,
+    LIFECYCLE_KEY,
+    STOP_KEY,
 )
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
@@ -167,10 +169,6 @@ class RelationState:
 
 class PeerState(RelationState):
     """State collection for the database relation."""
-
-    LIFECYCLE_KEY = "lifecycle"
-    STOP_KEY = "stop"
-
     def __init__(self, component: Application | Unit, relation: Relation | None):
         super().__init__(
             relation=relation,
@@ -181,29 +179,29 @@ class PeerState(RelationState):
     def get(self) -> Any:
         """Returns the value of the key."""
         return self.relation_data.get(
-            self.LIFECYCLE_KEY,
+            LIFECYCLE_KEY,
             None,
         )
 
     @property
-    def lifecycle(self) -> DPBenchmarkLifecyclePhase | None:
+    def lifecycle(self) -> DPBenchmarkLifecycleState | None:
         """Returns the value of the lifecycle key."""
-        return self.get(self.LIFECYCLE_KEY)
+        return self.get(LIFECYCLE_KEY)
 
     @lifecycle.setter
-    def lifecycle(self, status: DPBenchmarkLifecyclePhase):
+    def lifecycle(self, status: DPBenchmarkLifecycleState):
         """Sets the lifecycle key value."""
-        self.set({self.LIFECYCLE_KEY: status})
+        self.set({LIFECYCLE_KEY: status})
 
     @property
     def stop(self) -> bool:
         """Returns the value of the stop key."""
-        return self.relation_data.get(self.STOP_KEY, False)
+        return self.relation_data.get(STOP_KEY, False)
 
     @stop.setter
     def stop(self, switch: bool) -> bool:
         """Toggles the stop key value."""
-        self.set({self.STOP_KEY: switch})
+        self.set({STOP_KEY: switch})    
 
 
 class DatabaseState(RelationState):
