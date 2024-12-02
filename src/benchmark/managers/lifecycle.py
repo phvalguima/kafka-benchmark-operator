@@ -58,9 +58,9 @@ class LifecycleManager:
             transition == DPBenchmarkLifecycleTransition.PREPARE
             and self._compare_lifecycle_states(
                 self._peers_state(),
-                DPBenchmarkLifecycleState.AVAILABLE,
+                DPBenchmarkLifecycleState.PREPARING,
             )
-            <= 0
+            < 0
         ):
             return DPBenchmarkLifecycleState.PREPARING
         elif transition == DPBenchmarkLifecycleTransition.PREPARE:
@@ -74,9 +74,10 @@ class LifecycleManager:
             and self.config_manager.is_prepared()
         ):
             return DPBenchmarkLifecycleState.AVAILABLE
-        # OR highest peers state is AVAILABLE
+        # OR highest peers state is AVAILABLE but no actions has happened
         if (
-            self._compare_lifecycle_states(
+            transition is None
+            and self._compare_lifecycle_states(
                 self._peers_state(),
                 DPBenchmarkLifecycleState.AVAILABLE,
             )
@@ -107,7 +108,7 @@ class LifecycleManager:
         ]:
             return DPBenchmarkLifecycleState.RUNNING
 
-        # Changes taht takes us to FAILED:
+        # Changes that takes us to FAILED:
         # Workload has failed and we were:
         # - PREPARING
         # - RUNNING
@@ -177,7 +178,7 @@ class LifecycleManager:
             if phase == DPBenchmarkLifecycleState.UNSET:
                 return 0
             if phase == DPBenchmarkLifecycleState.PREPARING:
-                return 0
+                return 1
             if phase == DPBenchmarkLifecycleState.AVAILABLE:
                 return 2
             if phase == DPBenchmarkLifecycleState.RUNNING:
@@ -185,12 +186,12 @@ class LifecycleManager:
             if phase == DPBenchmarkLifecycleState.FAILED:
                 return 4
             if phase == DPBenchmarkLifecycleState.COLLECTING:
-                return 0
-            if phase == DPBenchmarkLifecycleState.UPLOADING:
-                return 0
-            if phase == DPBenchmarkLifecycleState.FINISHED:
-                return 0
-            if phase == DPBenchmarkLifecycleState.STOPPED:
                 return 5
+            if phase == DPBenchmarkLifecycleState.UPLOADING:
+                return 6
+            if phase == DPBenchmarkLifecycleState.FINISHED:
+                return 7
+            if phase == DPBenchmarkLifecycleState.STOPPED:
+                return 8
 
         return _get_value(neighbor) - _get_value(this)

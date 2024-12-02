@@ -9,12 +9,23 @@ from benchmark.managers.lifecycle import LifecycleManager
 
 
 class TestLifecycleManager(LifecycleManager):
-    def __init__(self, peers, workload):
+    def __init__(self, peers, config_manager):
         self.peers = peers
-        self.workload = workload
+        self.config_manager = config_manager
 
 
-def test_next_state_clean(lifecycle_manager):
+class MockPeerState:
+    def __init__(self, lifecycle):
+        self.lifecycle = lifecycle
+
+
+def test_next_state_clean():
+    config = MagicMock()
+    peers = MagicMock()
+    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.STOPPED
+    peers.units = MagicMock(return_value=[])
+    lifecycle_manager = TestLifecycleManager(peers, config)
+
     assert (
         lifecycle_manager.next(DPBenchmarkLifecycleTransition.CLEAN)
         == DPBenchmarkLifecycleState.UNSET
@@ -24,7 +35,7 @@ def test_next_state_clean(lifecycle_manager):
 def test_next_state_stop():
     config = MagicMock()
     peers = MagicMock()
-    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.STOPPED
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.STOPPED))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
 
@@ -39,7 +50,7 @@ def test_next_state_stop():
 def test_next_state_prepare():
     config = MagicMock()
     peers = MagicMock()
-    peers.unit_state.lifecycle = None
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.UNSET))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
 
@@ -49,10 +60,10 @@ def test_next_state_prepare():
     )
 
 
-def test_next_state_prepare_but_peers_not_ready():
+def test_next_state_prepare_but_peer_already_prepared():
     config = MagicMock()
     peers = MagicMock()
-    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.AVAILABLE
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.AVAILABLE))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
 
@@ -64,19 +75,19 @@ def test_next_state_prepare_available_as_leader():
     config = MagicMock()
     config.is_prepared = MagicMock(return_value=True)
     peers = MagicMock()
-    peers.unit_state.lifecycle = None
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.UNSET))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
     lifecycle_manager.current = MagicMock(return_value=DPBenchmarkLifecycleState.PREPARING)
 
-    assert lifecycle_manager.next(None) == DPBenchmarkLifecycleState.PREPARING
+    assert lifecycle_manager.next(None) == DPBenchmarkLifecycleState.AVAILABLE
 
 
 def test_next_state_prepare_available_as_follower():
     config = MagicMock()
     config.is_prepared = MagicMock(return_value=False)
     peers = MagicMock()
-    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.AVAILABLE
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.AVAILABLE))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
     lifecycle_manager.current = MagicMock(return_value=DPBenchmarkLifecycleState.UNSET)
@@ -88,21 +99,24 @@ def test_next_state_run_as_leader():
     config = MagicMock()
     config.is_prepared = MagicMock(return_value=False)
     peers = MagicMock()
-    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.AVAILABLE
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.AVAILABLE))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
     lifecycle_manager.current = MagicMock(return_value=DPBenchmarkLifecycleState.AVAILABLE)
 
-    assert lifecycle_manager.next(None) == DPBenchmarkLifecycleState.PREPARING
+    assert (
+        lifecycle_manager.next(DPBenchmarkLifecycleTransition.RUN)
+        == DPBenchmarkLifecycleState.RUNNING
+    )
 
 
 def test_next_state_run_as_follower():
     config = MagicMock()
     config.is_prepared = MagicMock(return_value=False)
     peers = MagicMock()
-    peers.unit_state.lifecycle = DPBenchmarkLifecycleState.RUNNING
+    peers.unit_state = MagicMock(return_value=MockPeerState(DPBenchmarkLifecycleState.RUNNING))
     peers.units = MagicMock(return_value=[])
     lifecycle_manager = TestLifecycleManager(peers, config)
     lifecycle_manager.current = MagicMock(return_value=DPBenchmarkLifecycleState.AVAILABLE)
 
-    assert lifecycle_manager.next(None) == DPBenchmarkLifecycleState.PREPARING
+    assert lifecycle_manager.next(None) == DPBenchmarkLifecycleState.RUNNING
