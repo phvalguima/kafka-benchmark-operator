@@ -6,7 +6,7 @@ Requires=network.target
 [Service]
 EnvironmentFile=-/etc/environment
 Environment=PYTHONPATH={{ charm_root }}/lib:{{ charm_root }}/venv:{{ charm_root }}/src/benchmark/wrapper
-ExecStart={{ charm_root }}/src/benchmark/wrapper/main.py --command=run --target_hosts={{ target_hosts }} --workload={{ workload }} --threads={{ threads }} --clients={{ clients }} --db_user={{ db_user }} --db_password={{ db_password }} --duration={{ duration }} --workload_params={{ workload_params }} --extra_labels={{ extra_labels }} {{ extra_config }}
+ExecStart={{ charm_root }}/src/benchmark/wrapper/main.py --command={{ command }} --workload={{ workload }} --threads={{ threads }} --clients={{ clients }} --duration={{ duration }} --workload_params={{ workload_params }} --extra_labels={{ extra_labels }} {{ extra_config }}
 Restart=no
 TimeoutSec=600
 Type=simple

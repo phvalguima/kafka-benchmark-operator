@@ -6,7 +6,7 @@ options:
       Used to identify the test. MUST NOT be empty.
       It is the string that represents the given test (e.g. "aws_c6a.xlarge_3nodes_<WORKLOAD>").
       It is used by the collector to put the final data on the right place.
-  parallel_process:
+  parallel_processes:
     default: 8
     type: int
     description: |

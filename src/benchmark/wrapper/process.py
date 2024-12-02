@@ -14,7 +14,13 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 
-from core import BenchmarkMetrics, ProcessModel, ProcessStatus, WorkloadCLIArgsModel, BenchmarkCommand
+from core import (
+    BenchmarkCommand,
+    BenchmarkMetrics,
+    ProcessModel,
+    ProcessStatus,
+    WorkloadCLIArgsModel,
+)
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
@@ -32,6 +38,7 @@ class BenchmarkProcess(ABC):
     metrics that need to be uploaded to Prometheus OR when the output is just a log
     line to keep track of the information.
     """
+
     def __init__(
         self,
         model: ProcessModel,
@@ -134,7 +141,7 @@ class BenchmarkManager(BenchmarkProcess):
 
     def __init__(
         self,
-        model: ProcessModel|None,
+        model: ProcessModel | None,
         args: WorkloadCLIArgsModel,
         metrics: BenchmarkMetrics,
         unstarted_workers: list[BenchmarkProcess],
@@ -173,40 +180,6 @@ class BenchmarkManager(BenchmarkProcess):
             worker.stop()
         if self.model:
             super().stop()
-
-
-class BenchmarkPreparer(BenchmarkManager):
-    """This class is in charge of managing all the processes for prepare."""
-
-    def __init__(
-        self,
-        model: ProcessModel,
-        args: WorkloadCLIArgsModel,
-        metrics: BenchmarkMetrics,
-    ):
-        super().__init__(model, args, metrics)
-
-    async def _exec(self, auto_stop: bool = True):
-        tasks = []
-        tasks.append(asyncio.create_task(self.process(auto_stop=auto_stop)))
-        await asyncio.gather(*tasks)
-
-    async def process(
-        self,
-        auto_stop: bool = True,
-    ):
-        raise NotImplementedError("This method must be implemented in the subclass.")
-
-    def run(self):
-        """Run all the workers in the async loop."""
-        asyncio.run(self._exec())
-
-    def all_running(self) -> bool:
-        """Check if all the workers are running."""
-        return (
-            all(w.status() == ProcessStatus.RUNNING for w in self.workers)
-            and self.status() == ProcessStatus.RUNNING
-        )
 
 
 class WorkloadToProcessMapping(ABC):

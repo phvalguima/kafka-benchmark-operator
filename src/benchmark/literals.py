@@ -83,6 +83,7 @@ class DPBenchmarkLifecycleState(StrEnum):
     * FINISHED: the service has finished
     * STOPPED: the service has been stopped by the user
     """
+
     UNSET = "unset"
     PREPARING = "preparing"
     AVAILABLE = "available"
@@ -98,7 +99,7 @@ class DPBenchmarkLifecycleTransition(StrEnum):
     """Benchmark lifecycle transition representation."""
 
     PREPARE = "prepare"
-    RUN = "RUN"
+    RUN = "run"
     STOP = "stop"
     CLEAN = "clean"
 
@@ -109,9 +110,6 @@ class DPBenchmarkWorkloadLifecycleState(StrEnum):
     PREPARE = "prepare"
     RUN = "run"
     STOP = "stop"
-    COLLECT = "collect"
-    UPLOAD = "upload"
-    CLEAN = "clean"
 
 
 class DPBenchmarkWorkloadState(StrEnum):

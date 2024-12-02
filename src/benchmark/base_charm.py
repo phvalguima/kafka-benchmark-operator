@@ -25,11 +25,9 @@ from ops.framework import EventBase, EventSource
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
-    MaintenanceStatus,
     WaitingStatus,
 )
 
-from benchmark.core.benchmark_workload_base import WorkloadBase
 from benchmark.core.models import DPBenchmarkLifecycleState, PeerState
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
@@ -38,10 +36,8 @@ from benchmark.literals import (
     METRICS_PORT,
     PEER_RELATION,
     DPBenchmarkError,
-    DPBenchmarkExecError,
+    DPBenchmarkLifecycleTransition,
     DPBenchmarkMissingOptionsError,
-    DPBenchmarkServiceError,
-    DPBenchmarkUnitNotReadyError,
 )
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
@@ -110,7 +106,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.peers = PeerRelationHandler(self, PEER_RELATION)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
-        self.workload = workload_builder()
+        # self.workload = workload_builder()
 
         self.lifecycle = LifecycleManager(self.peers, self.workload)
 
@@ -123,14 +119,14 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             ],
             scrape_configs=self.scrape_config,
         )
+        self.labels = f"{self.model.name},{self.unit.name}"
 
         self.config_manager = ConfigManager(
             workload=self.workload,
             database=self.database.state,
             config=self.config,
+            labes=self.labels,
         )
-
-        self.labels = f"{self.model.name},{self.unit.name}"
 
     ###########################################################################
     #
@@ -249,7 +245,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self._process_transition(DPBenchmarkLifecycleTransition.PREPARE):
             event.fail("Failed to prepare the benchmark")
         event.set_results({"message": "Benchmark is prepared"})
-        return
 
     def on_run_action(self, event: EventBase) -> None:
         """Process the run action."""
@@ -260,7 +255,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self._process_transition(DPBenchmarkLifecycleTransition.RUN):
             event.fail("Failed to run the benchmark")
         event.set_results({"message": "Benchmark is running"})
-        return
 
     def on_stop_action(self, event: EventBase) -> None:
         """Process the stop action."""
@@ -271,7 +265,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self._process_transition(DPBenchmarkLifecycleTransition.STOP):
             event.fail("Failed to stop the benchmark")
         event.set_results({"message": "Benchmark is stopped"})
-        return
 
     def on_clean_action(self, event: EventBase) -> None:
         """Process the clean action."""
@@ -282,7 +275,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self._process_transition(DPBenchmarkLifecycleTransition.CLEAN):
             event.fail("Failed to clean the benchmark")
         event.set_results({"message": "Benchmark is cleaned"})
-        return
 
     def _process_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:
         """Process the action."""
@@ -290,7 +282,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return False
 
         # Calculate if we have a workload change:
-        if (next_workload_state := self.workload_lifecycle(state)):
+        if next_workload_state := self.workload_lifecycle(state):
             self.workload.to(next_workload_state)
 
         # Now, we update our state:

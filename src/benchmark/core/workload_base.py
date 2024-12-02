@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from benchmark.literals import DPBenchmarkServiceState
+from benchmark.literals import DPBenchmarkWorkloadLifecycleState
 
 
 class WorkloadTemplatePaths(ABC):
@@ -21,6 +21,12 @@ class WorkloadTemplatePaths(ABC):
     @abstractmethod
     def service(self) -> str | None:
         """The optional path to the service file managing the python wrapper."""
+        ...
+
+    @property
+    @abstractmethod
+    def service_template(self) -> str | None:
+        """The path to the service template file."""
         ...
 
     @property
@@ -51,6 +57,12 @@ class WorkloadTemplatePaths(ABC):
         """The path to the workload template folder."""
         ...
 
+    @property
+    @abstractmethod
+    def charm_root(self) -> str:
+        """The path to the charm root folder."""
+        ...
+
 
 class WorkloadBase(ABC):
     """Base interface for common workload operations."""
@@ -58,13 +70,13 @@ class WorkloadBase(ABC):
     paths: WorkloadTemplatePaths
 
     @abstractmethod
-    def install(self) -> None:
+    def install(self) -> bool:
         """Installs the workload."""
         ...
 
     def start(self) -> bool:
         """Starts the workload service."""
-        return self.restart()
+        ...
 
     @abstractmethod
     def halt(self) -> bool:
@@ -74,6 +86,12 @@ class WorkloadBase(ABC):
     @abstractmethod
     def restart(self) -> bool:
         """Restarts the workload service."""
+        ...
+
+    @property
+    @abstractmethod
+    def state(self) -> DPBenchmarkWorkloadLifecycleState:
+        """Return the current workload state."""
         ...
 
     @abstractmethod
@@ -86,16 +104,6 @@ class WorkloadBase(ABC):
         Returns:
             List of string lines from the specified path
         """
-        ...
-
-    @abstractmethod
-    def to(self, transition: DPBenchmarkWorkloadLifecycleState):
-        """Transition the workload to a new state."""
-        ...
-
-    @abstractmethod
-    def state(self) -> DPBenchmarkWorkloadLifecycleState:
-        """Return the current workload state."""
         ...
 
     @abstractmethod
@@ -120,36 +128,20 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
-    def active(self) -> bool:
+    def is_active(self) -> bool:
         """Checks that the workload is active."""
         ...
 
     @abstractmethod
-    def check_service(self) -> DPBenchmarkServiceState:
-        """Checks if the workload service is running."""
+    def is_stopped(self) -> bool:
+        """Checks that the workload is stopped."""
         ...
-
-    def is_prepared(self) -> bool:
-        """Checks if the benchmark service has passed its "prepare" status."""
-        return (
-            self.paths.exists(self.paths.benchmark_wrapper)
-            and self.paths.exists(self.paths.workload_params)
-            and self.paths.exists(self.paths.service)
-        )
-
-    def is_executing(self) -> bool:
-        """Checks if the benchmark service is executing."""
-        return self.is_prepared() and self.check_service() == DPBenchmarkServiceState.RUNNING
 
     def is_halted(self) -> bool:
         """Checks if the benchmark service has halted."""
-        return self.is_prepared() and not self.is_running() and not self.is_failed()
+        return self._is_stopped() and not self.is_active() and not self.is_failed()
 
     @abstractmethod
-    def is_uploading(self) -> bool:
-        """Checks if the benchmark service is still running the upload process."""
-        ...
-
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""
-        return self.is_prepared() and self.check_service() == DPBenchmarkServiceState.FAILED
+        ...

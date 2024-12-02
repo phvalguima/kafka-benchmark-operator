@@ -12,11 +12,13 @@ DPBenchmarkWorkloadLifecycleState
 from benchmark.core.workload_base import WorkloadBase
 from benchmark.literals import (
     DPBenchmarkLifecycleState,
-    DPBenchmarkWorkloadState,
     DPBenchmarkWorkloadLifecycleState,
+    DPBenchmarkWorkloadState,
 )
 
+
 class WorkloadLifecycleManager:
+    """The workload lifecycle manager class."""
 
     def __init__(self, workload: WorkloadBase):
         self.workload = workload
@@ -25,15 +27,14 @@ class WorkloadLifecycleManager:
         """Return the current lifecycle state."""
         return self.workload.state
 
-    def next(self, charm_state: DPBenchmarkLifecycleState) -> DPBenchmarkWorkloadLifecycleState|None:
-        """Return the next lifecycle state."""
+    def next(
+        self, charm_state: DPBenchmarkLifecycleState
+    ) -> DPBenchmarkWorkloadLifecycleState | None:
+        """Return the next lifecycle state based on the charm_state."""
         if charm_state == DPBenchmarkLifecycleState.STOPPED:
             return DPBenchmarkWorkloadLifecycleState.STOP
 
-        if charm_state == DPBenchmarkLifecycleState.UNSET:
-            return DPBenchmarkWorkloadLifecycleState.CLEAN
-
-        if self.workload.is_executing():
+        if self.workload.is_active():
             # We do not transition to any other state while executing
             return None
 

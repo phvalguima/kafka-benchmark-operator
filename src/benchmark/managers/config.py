@@ -7,37 +7,40 @@ This class summarizes all the configuration needed for the workload execution
 and returns a model containing that information.
 """
 
-import os
-import shutil
 from typing import Any, Optional
 
-from charms.operator_libs_linux.v1.systemd import daemon_reload
 from jinja2 import Environment, FileSystemLoader, exceptions
 
 from benchmark.core.models import (
     DatabaseState,
-    DPBenchmarkExecutionExtraConfigsModel,
-    DPBenchmarkExecutionModel,
+    DPBenchmarkWrapperOptionsModel,
 )
 from benchmark.core.workload_base import WorkloadBase
+from benchmark.literals import DPBenchmarkLifecycleTransition
 
 
 class ConfigManager:
+    """Implements the config changes that happen on the workload."""
 
     def __init__(
         self,
         workload: WorkloadBase,
         database: DatabaseState,
         config: dict[str, Any],
+        labels: Optional[str] = "",
     ):
         self.workload = workload
         self.config = config
         self.database = database
+        self.labels = labels
+
+    def get_workload_params(self) -> dict[str, Any]:
+        """Return the workload parameters."""
+        return {}
 
     def get_execution_options(
         self,
-        extra_config: DPBenchmarkExecutionExtraConfigsModel | None = None,
-    ) -> Optional[DPBenchmarkExecutionModel]:
+    ) -> Optional[DPBenchmarkWrapperOptionsModel]:
         """Returns the execution options.
 
         Raises:
@@ -47,82 +50,137 @@ class ConfigManager:
             # It means we are not yet ready. Return None
             # This check also serves to ensure we have only one valid relation at the time
             return None
-        return DPBenchmarkExecutionModel(
+        return DPBenchmarkWrapperOptionsModel(
+            test_name=self.config.get("test_name"),
+            parallel_processes=self.config.get("parallel_processes"),
             threads=self.config.get("threads"),
             duration=self.config.get("duration"),
-            clients=self.config.get("clients"),
+            run_count=self.config.get("run_count"),
             db_info=db,
             workload_name=self.config.get("workload_name"),
-            workload_params=self._generate_workload_params(),
-            extra=extra_config,
+            report_interval=self.config.get("report_interval"),
+            workload_profile=self.config.get("workload_profile"),
+            workload_params=self.workload.paths.workload_params,
+            labels=self.labels,
         )
 
-    def prepare(
-        self,
-        workload_name: str,
-        labels: Optional[str] = "",
-    ) -> bool:
-        """Prepare the benchmark service."""
-        ...
-
-
-class SystemdConfigManager(ConfigManager):
-    """The config manager for systemd class."""
-
-    def prepare(
-        self,
-        workload_name: str,
-        labels: Optional[str] = "",
-    ) -> bool:
-        """Prepare the benchmark service."""
-        try:
-            self.render_workload_params(
-                workload_name=workload_name,
-            )
-            if not self.render_service_file(
-                labels=labels,
-            ):
-                return False
-        except Exception:
-            return False
+    def is_collecting(self) -> bool:
+        """Check if the workload is collecting data."""
+        # TODO: we define a way to check collection is finished.
+        # For now, this feature is not available.
         return True
 
-    def render_service_file(
-        self,
-        labels: Optional[str] = "",
-    ) -> bool:
-        """Render the systemd service file."""
-        if not (db := self.get_execution_options()):
-            return False
-        config = {
-            "target_hosts": ",".join(db.db_info.hosts)
-            if isinstance(db.db_info.hosts, list)
-            else db.db_info.hosts,
-            "workload": db.workload_name,
-            "threads": db.threads,
-            "clients": db.clients,
-            "db_user": db.db_info.username,
-            "db_password": db.db_info.password,
-            "duration": db.duration,
-            "workload_params": self.workload.paths.workload_params,
-            "extra_labels": labels,
-        }
-        self._render(
-            self.workload.paths.svc_name + ".service.j2",
-            config,
-            dst_filepath=self.workload.paths.service,
-        )
-        return daemon_reload()
+    def is_uploading(self) -> bool:
+        """Check if the workload is uploading data."""
+        # TODO: we define a way to check collection is finished.
+        # For now, this feature is not available.
+        return True
 
-    def render_workload_params(
+    def prepare(
         self,
-        workload_name: str,
-    ):
-        """Renders the workload parameters file."""
-        self._render(
-            "workload_parameter/" + workload_name + ".json.j2",
-            self.get_execution_options(),
-            self.workload.paths.workload_params,
+    ) -> bool:
+        """Prepare the benchmark service."""
+        self._render_params(self.workload.paths.workload_params)
+        self._render_service(
+            DPBenchmarkLifecycleTransition.PREPARE,
+            self.workload.paths.service,
+        )
+
+    def is_prepared(
+        self,
+    ) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        return self._check(DPBenchmarkLifecycleTransition.PREPARE) and self.workload.is_halted()
+
+    def run(
+        self,
+    ) -> bool:
+        """Prepare the benchmark service."""
+        self._render_params(self.workload.paths.workload_params)
+        self._render_service(
+            DPBenchmarkLifecycleTransition.RUN,
+            self.workload.paths.service,
+        )
+
+    def is_running(
+        self,
+    ) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        return self._check(DPBenchmarkLifecycleTransition.RUN) and self.workload.is_active()
+
+    def stop(
+        self,
+    ) -> bool:
+        """Prepare the benchmark service."""
+        self._render_params(self.workload.paths.workload_params)
+        self._render_service(
+            DPBenchmarkLifecycleTransition.STOP,
+            self.workload.paths.service,
+        )
+
+    def is_stopped(
+        self,
+    ) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        return self._check(DPBenchmarkLifecycleTransition.STOP) and self.workload.is_halted()
+
+    def clean(
+        self,
+    ) -> bool:
+        """Prepare the benchmark service."""
+        self._render_params(self.workload.paths.workload_params)
+        self._render_service(
+            DPBenchmarkLifecycleTransition.CLEAN,
+            self.workload.paths.service,
+        )
+
+    def is_cleaned(
+        self,
+    ) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        return self._check(DPBenchmarkLifecycleTransition.CLEAN) and self.workload.is_halted()
+
+    def _render_params(
+        self,
+        dst_path: str | None = None,
+    ) -> str | None:
+        """Render the workload parameters."""
+        return self._render(
+            self.workload.paths.workload_params_template,
+            self.get_workload_params(),
+            dst_path,
+        )
+
+    def _render_service(
+        self,
+        transition: DPBenchmarkLifecycleTransition,
+        dst_path: str | None = None,
+    ) -> str | None:
+        """Render the workload parameters."""
+        values = self.get_execution_options().dict() | {
+            "charm_root": self.workload.paths.charm_root,
+            "command": transition.value,
+        }
+        return self._render(
+            self.workload.paths.service_template,
+            values,
+            dst_path,
+        )
+
+    def _check(
+        self,
+        transition: DPBenchmarkLifecycleTransition,
+    ) -> bool:
+        values = self.get_execution_options().dict() | {
+            "charm_root": self.workload.paths.charm_root,
+            "command": transition.value,
+        }
+        return self.workload.read(self.workload.paths.service) == self._render(
+            self.workload.paths.service_template,
+            values,
+        ) and self.workload.read(self.workload.paths.workload_params) == self._render(
+            self.workload.paths.workload_params_template,
+            self.get_workload_params(),
         )
 
     def _render(
@@ -142,18 +200,6 @@ class SystemdConfigManager(ConfigManager):
             return content
         self.workload.write(content, dst_filepath)
 
-    def unset(self) -> bool:
-        """Unset the benchmark service."""
-        try:
-            if not self.workload.stop():
-                return False
-            os.remove(self.workload.paths.service)
-            os.remove(self.workload.paths.workload_params)
-            if not daemon_reload():
-                return False
-        except Exception:
-            return False
-        return True
 
-    def _generate_workload_params(self):
-        return {}
+class SystemdConfigManager(ConfigManager):
+    """The config manager for systemd class."""

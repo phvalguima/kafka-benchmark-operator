@@ -2,10 +2,10 @@
 # See LICENSE file for licensing details.
 
 """The peer event class."""
-from typing import Any
 
 from ops.framework import Object
 from ops.model import Unit
+
 from benchmark.core.models import PeerState
 
 

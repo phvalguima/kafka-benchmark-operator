@@ -15,12 +15,12 @@ from ops.model import Application, Relation, Unit
 from pydantic import BaseModel, error_wrappers, root_validator
 
 from benchmark.literals import (
+    LIFECYCLE_KEY,
+    STOP_KEY,
     DPBenchmarkLifecycleState,
     DPBenchmarkMissingOptionsError,
     Scope,
     Substrate,
-    LIFECYCLE_KEY,
-    STOP_KEY,
 )
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
@@ -89,19 +89,7 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
         return field_values
 
 
-class DPBenchmarkConfigModelBase(BaseModel):
-    """Benchmark config model contains all the information needed to render the workload.
-
-    This model is used to render the workload config files.
-
-    This class is abstract as each benchmark charm must inherit from it and provide the
-    necessary implementation.
-    """
-
-    workload_profile: str = "default"
-
-
-class DPBenchmarkWrapperModel(BaseModel):
+class DPBenchmarkWrapperOptionsModel(BaseModel):
     """Benchmark execution model.
 
     This class contains all the config info needed to pass to the benchmark tool wrapper,
@@ -116,6 +104,8 @@ class DPBenchmarkWrapperModel(BaseModel):
     db_info: DPBenchmarkBaseDatabaseModel
     workload_name: str
     report_interval: int
+    workload_profile: str
+    labels: Optional[str] = ""
 
 
 class RelationState:
@@ -169,6 +159,7 @@ class RelationState:
 
 class PeerState(RelationState):
     """State collection for the database relation."""
+
     def get(self) -> Any:
         """Returns the value of the key."""
         return self.relation_data.get(
@@ -194,7 +185,7 @@ class PeerState(RelationState):
     @stop.setter
     def stop(self, switch: bool) -> bool:
         """Toggles the stop key value."""
-        self.set({STOP_KEY: switch})    
+        self.set({STOP_KEY: switch})
 
 
 class DatabaseState(RelationState):
