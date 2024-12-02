@@ -12,6 +12,7 @@ class TestLifecycleManager(LifecycleManager):
     def __init__(self, peers, config_manager):
         self.peers = peers
         self.config_manager = config_manager
+        self.config_manager.workload.is_failed = MagicMock(return_value=False)
 
 
 class MockPeerState:

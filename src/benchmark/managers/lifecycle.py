@@ -52,16 +52,33 @@ class LifecycleManager:
         ):
             return DPBenchmarkLifecycleState.STOPPED
 
-        # Changes that takes us to PREPARING:
-        # We received a prepare signal and no one else is available yet
+        # FAILED takes precedence over all other states
+        # Changes that takes us to FAILED:
+        # Workload has failed and we were:
+        # - PREPARING
+        # - RUNNING
+        # - COLLECTING
+        # - UPLOADING
         if (
-            transition == DPBenchmarkLifecycleTransition.PREPARE
-            and self._compare_lifecycle_states(
-                self._peers_state(),
+            self.current()
+            in [
                 DPBenchmarkLifecycleState.PREPARING,
-            )
-            < 0
+                DPBenchmarkLifecycleState.RUNNING,
+                DPBenchmarkLifecycleState.COLLECTING,
+                DPBenchmarkLifecycleState.UPLOADING,
+            ]
+            and self.config_manager.workload.is_failed()
         ):
+            return DPBenchmarkLifecycleState.FAILED
+
+        # Changes that takes us to PREPARING:
+        # We received a prepare signal and no one else is available yet or we failed previously
+        if transition == DPBenchmarkLifecycleTransition.PREPARE and (
+            self._peers_state() or DPBenchmarkLifecycleState.UNSET
+        ) in [
+            DPBenchmarkLifecycleState.UNSET,
+            DPBenchmarkLifecycleState.FAILED,
+        ]:
             return DPBenchmarkLifecycleState.PREPARING
         elif transition == DPBenchmarkLifecycleTransition.PREPARE:
             # Failed to calculate a proper state as we have neighbors in more advanced state for now
@@ -103,28 +120,10 @@ class LifecycleManager:
         if self._compare_lifecycle_states(
             self._peers_state(),
             DPBenchmarkLifecycleState.RUNNING,
-        ) >= 0 and self.current() in [
+        ) == 0 and self.current() in [
             DPBenchmarkLifecycleState.AVAILABLE,
         ]:
             return DPBenchmarkLifecycleState.RUNNING
-
-        # Changes that takes us to FAILED:
-        # Workload has failed and we were:
-        # - PREPARING
-        # - RUNNING
-        # - COLLECTING
-        # - UPLOADING
-        if (
-            self.current()
-            in [
-                DPBenchmarkLifecycleState.PREPARING,
-                DPBenchmarkLifecycleState.RUNNING,
-                DPBenchmarkLifecycleState.COLLECTING,
-                DPBenchmarkLifecycleState.UPLOADING,
-            ]
-            and self.config_manager.workload.is_failed()
-        ):
-            return DPBenchmarkLifecycleState.FAILED
 
         # Changes that takes us to COLLECTING:
         # the workload is in collecting state
