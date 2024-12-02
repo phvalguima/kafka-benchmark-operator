@@ -94,7 +94,27 @@ class DPBenchmarkLifecycleState(StrEnum):
     STOPPED = "stopped"
 
 
-class DPBenchmarkServiceState(StrEnum):
+class DPBenchmarkLifecycleTransition(StrEnum):
+    """Benchmark lifecycle transition representation."""
+
+    PREPARE = "prepare"
+    RUN = "RUN"
+    STOP = "stop"
+    CLEAN = "clean"
+
+
+class DPBenchmarkWorkloadLifecycleState(StrEnum):
+    """Benchmark lifecycle state representation."""
+
+    PREPARE = "prepare"
+    RUN = "run"
+    STOP = "stop"
+    COLLECT = "collect"
+    UPLOAD = "upload"
+    CLEAN = "clean"
+
+
+class DPBenchmarkWorkloadState(StrEnum):
     """Represents the different states of the benchmark service."""
 
     RUNNING = "running"

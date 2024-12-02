@@ -7,7 +7,7 @@ from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     DPBenchmarkLifecycleState,
-    LIFECYCLE_KEY,
+    DPBenchmarkLifecycleTransition,
 )
 
 class LifecycleManager:
@@ -23,18 +23,142 @@ class LifecycleManager:
             or DPBenchmarkLifecycleState.UNSET
         )
 
-    def next(self) -> DPBenchmarkLifecycleState|None:
-        """Return the next lifecycle state after checking each neighbor."""
-        next_state = (
-            self.peers.unit_state(self.peers.this_unit()).lifecycle
-            or DPBenchmarkLifecycleState.UNSET
-        )
+    def update(self, state: DPBenchmarkLifecycleState):
+        """Update the lifecycle state."""
+        self.peers.unit_state(self.peers.this_unit()).lifecycle = state
+
+    def next(self, transition: DPBenchmarkLifecycleTransition|None) -> DPBenchmarkLifecycleState|None:
+        """Return the next lifecycle state."""
+        # Changes that takes us to UNSET:
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            # Simplest case, we return to unset
+            return DPBenchmarkLifecycleState.UNSET
+
+        # Changes that takes us to STOPPED:
+        # Either we received a stop transition
+        if transition == DPBenchmarkLifecycleTransition.STOP:
+            return DPBenchmarkLifecycleState.STOPPED
+        # OR one of our peers is in stopped state
+        if (
+            self._compare_lifecycle_states(
+                self._peers_state(),
+                DPBenchmarkLifecycleState.STOPPED,
+            ) == 0
+        ):
+            return DPBenchmarkLifecycleState.STOPPED
+
+        # Changes that takes us to PREPARING:
+        # We received a prepare signal and no one else is available yet
+        if (
+            transition == DPBenchmarkLifecycleTransition.PREPARE
+            and self._compare_lifecycle_states(
+                self._peers_state(),
+                DPBenchmarkLifecycleState.AVAILABLE,
+            ) <= 0
+        ):
+            return DPBenchmarkLifecycleState.PREPARING
+
+        # Changes that takes us to AVAILABLE:
+        # Either we were in preparing and we are finished
+        if (
+            self.current() == DPBenchmarkLifecycleState.PREPARING
+            and self.workload.is_available()
+        ):
+            return DPBenchmarkLifecycleState.AVAILABLE
+        # OR highest peers state is AVAILABLE
+        if (
+            self._compare_lifecycle_states(
+                self._peers_state(),
+                DPBenchmarkLifecycleState.AVAILABLE,
+            ) == 0
+        ):
+            return DPBenchmarkLifecycleState.AVAILABLE
+
+        # Changes that takes us to RUNNING:
+        # Either we receive a transition to running and we were in one of:
+        # - AVAILABLE
+        # - FAILED
+        # - STOPPED
+        # - FINISHED
+        if (
+            transition == DPBenchmarkLifecycleTransition.RUN
+            and self.current() in [
+                DPBenchmarkLifecycleState.AVAILABLE,
+                DPBenchmarkLifecycleState.FAILED,
+                DPBenchmarkLifecycleState.STOPPED,
+                DPBenchmarkLifecycleState.FINISHED,
+            ]
+        ):
+            return DPBenchmarkLifecycleState.RUNNING
+        # OR any other peer is beyond the >=RUNNING state
+        # and we are still AVAILABLE.
+        if (
+            self._compare_lifecycle_states(
+                self._peers_state(),
+                DPBenchmarkLifecycleState.RUNNING,
+            ) >= 0
+            and self.current() in [
+                DPBenchmarkLifecycleState.AVAILABLE,
+            ]
+        ):
+            return DPBenchmarkLifecycleState.RUNNING
+
+        # Changes taht takes us to FAILED:
+        # Workload has failed and we were:
+        # - PREPARING
+        # - RUNNING
+        # - COLLECTING
+        # - UPLOADING
+        if (
+            self.current() in [
+                DPBenchmarkLifecycleState.PREPARING,
+                DPBenchmarkLifecycleState.RUNNING,
+                DPBenchmarkLifecycleState.COLLECTING,
+                DPBenchmarkLifecycleState.UPLOADING,
+            ]
+            and self.workload.is_failed()
+        ):
+            return DPBenchmarkLifecycleState.FAILED
+
+        # Changes that takes us to COLLECTING:
+        # the workload is in collecting state
+        if (
+            self.workload.is_collecting()
+        ):
+            return DPBenchmarkLifecycleState.COLLECTING
+
+        # Changes that takes us to UPLOADING:
+        # the workload is in uploading state
+        if (
+            self.workload.is_uploading()
+        ):
+            return DPBenchmarkLifecycleState.UPLOADING
+
+        # Changes that takes us to FINISHED:
+        # Workload has finished and we were in one of:
+        # - RUNNING
+        # - UPLOADING
+        if (
+            self.current() in [
+                DPBenchmarkLifecycleState.RUNNING,
+                DPBenchmarkLifecycleState.UPLOADING,
+            ]
+            and self.workload.is_finished()
+        ):
+            return DPBenchmarkLifecycleState.FINISHED
+
+        # We are in an incongruent state OR the transition does not make sense
+        return None
+
+    def _peers_state(self) -> DPBenchmarkLifecycleState|None:
+        next_state = self.peers.unit_state(self.peers.this_unit()).lifecycle
         for unit in self.peers.units():
             neighbor = self.peers.unit_state(unit).lifecycle
             if neighbor is None:
                 continue
-            elif self._compare_lifecycle_states(neighbor, next_state):
+            elif self._compare_lifecycle_states(neighbor, next_state) > 0:
                 next_state = neighbor
+        return next_state if self.can(next_state) else None
 
     def _compare_lifecycle_states(
         self, neighbor: DPBenchmarkLifecycleState, this: DPBenchmarkLifecycleState

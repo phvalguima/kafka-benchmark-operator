@@ -219,7 +219,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         self._set_status()
 
-    def _on_relation_broken(self, event: EventBase) -> None:
+    def _on_relation_broken(self, _: EventBase) -> None:
         self.stop()
         self.clean_up()
 
@@ -240,125 +240,61 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     #
     ###########################################################################
 
-    def lifecycle_update(self):
-        """Update the lifecycle of the benchmark."""
-        next = self.lifecycle.next()
-        if next == DPBenchmarkLifecycleState.UNSET:
-            self.advance_to_next_step()
+    def on_prepare_action(self, event: EventBase) -> None:
+        """Process the prepare action."""
+        if not self._preflight_checks():
+            event.fail("Missing DB or S3 relations")
+            return
 
-    def advance_to_next_step(self) -> None:
-        """Runs the next step in the benchmark lifecycle."""
-        state = PeerState(self.model.unit, PEER_RELATION)
-        if state.lifecycle == DPBenchmarkLifecycleState.UNSET:
-            self.prepare()
-        elif state.lifecycle == DPBenchmarkLifecycleState.AVAILABLE:
-            self.run()
-        elif state.lifecycle == DPBenchmarkLifecycleState.RUNNING:
-            self.stop()
+        if not self._process_transition(DPBenchmarkLifecycleTransition.PREPARE):
+            event.fail("Failed to prepare the benchmark")
+        event.set_results({"message": "Benchmark is prepared"})
         return
 
-    def on_prepare_action(self, event: EventBase) -> None:
-        """Prepare the database.
-
-        There are two steps: the actual prepare command and setting a target to inform the
-        prepare was successful.
-        """
-        if self.workload.is_prepared():
-            event.fail("Benchmark is already prepared, stop and clean up the cluster first")
-            return
-
-        self.unit.status = MaintenanceStatus("Running prepare command...")
-        try:
-            self.prepare()
-        except DPBenchmarkExecError:
-            event.fail("Failed: error in benchmark while executing prepare")
-        except DPBenchmarkMissingOptionsError as e:
-            event.fail(f"Failed: missing database options {e}")
-        else:
-            event.set_results({"status": "prepared"})
-        self._set_status()
-
-    def prepare(self) -> None:
-        """Prepares the database and sets the state."""
-        if self.unit.is_leader():
-            self.workload.exec("prepare", self.labels)
-
-        if not self.config_manager.prepare(
-            workload_name=self.config["workload_name"],
-            labels=self.labels,
-        ):
-            raise DPBenchmarkExecError()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.AVAILABLE)
-
     def on_run_action(self, event: EventBase) -> None:
-        """Run benchmark action."""
-        try:
-            self.run()
-            event.set_results({"status": "running"})
-        except DPBenchmarkUnitNotReadyError:
-            event.fail("Failed: benchmark is not ready.")
+        """Process the run action."""
+        if not self._preflight_checks():
+            event.fail("Missing DB or S3 relations")
             return
-        except DPBenchmarkServiceError as e:
-            event.fail(f"Failed: error in benchmark service {e}")
-            return
-        self._set_status()
 
-    def run(self) -> None:
-        """Run the benchmark service."""
-        if not self.workload.is_prepared():
-            raise DPBenchmarkUnitNotReadyError()
-        self.workload.restart()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.RUNNING)
+        if not self._process_transition(DPBenchmarkLifecycleTransition.RUN):
+            event.fail("Failed to run the benchmark")
+        event.set_results({"message": "Benchmark is running"})
+        return
 
     def on_stop_action(self, event: EventBase) -> None:
-        """Stop benchmark service."""
-        try:
-            if not self.workload.is_running():
-                self.stop()
-                event.set_results({"status": "stopped"})
-        except (DPBenchmarkUnitNotReadyError, DPBenchmarkServiceError) as e:
-            event.fail(f"Failed: error in benchmark service {e}")
+        """Process the stop action."""
+        if not self._preflight_checks():
+            event.fail("Missing DB or S3 relations")
             return
-        self._set_status()
 
-    def stop(self) -> None:
-        """Stop the benchmark service. Returns true if stop was successful."""
-        if not self.workload.is_running():
-            raise DPBenchmarkUnitNotReadyError()
-        self.workload.stop()
-
-        # Mark it as stopped
-        PeerState(self.model.unit, PEER_RELATION).stop()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.COLLECTING)
-        self.on.check_collect.emit()
+        if not self._process_transition(DPBenchmarkLifecycleTransition.STOP):
+            event.fail("Failed to stop the benchmark")
+        event.set_results({"message": "Benchmark is stopped"})
+        return
 
     def on_clean_action(self, event: EventBase) -> None:
-        """Clean the database."""
-        try:
-            self.clean_up()
-        except DPBenchmarkMissingOptionsError as e:
-            event.fail(f"Failed: missing database options {e}")
+        """Process the clean action."""
+        if not self._preflight_checks():
+            event.fail("Missing DB or S3 relations")
             return
-        except DPBenchmarkExecError as e:
-            event.fail(f"Failed: error in benchmark while executing clean {e}")
-            return
-        except DPBenchmarkServiceError as e:
-            event.fail(f"Failed: error in benchmark service {e}")
-            return
-        self._set_status()
 
-    def clean_up(self) -> None:
-        """Clean up the database and the unit.
+        if not self._process_transition(DPBenchmarkLifecycleTransition.CLEAN):
+            event.fail("Failed to clean the benchmark")
+        event.set_results({"message": "Benchmark is cleaned"})
+        return
 
-        We recheck the service status, as we do notw ant to make any distinctions between the different steps.
-        """
-        if self.workload.is_running():
-            self.workload.stop()
+    def _process_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:
+        """Process the action."""
+        if not (state := self.lifecycle.next(transition)):
+            return False
 
-        if self.unit.is_leader():
-            self.workload.exec("clean", self.labels)
-        self.config_manager.unset()
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.UNSET)
+        # Calculate if we have a workload change:
+        if (next_workload_state := self.workload_lifecycle(state)):
+            self.workload.to(next_workload_state)
+
+        # Now, we update our state:
+        self.lifecycle.update(state)
 
     ###########################################################################
     #

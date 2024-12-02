@@ -169,13 +169,6 @@ class RelationState:
 
 class PeerState(RelationState):
     """State collection for the database relation."""
-    def __init__(self, component: Application | Unit, relation: Relation | None):
-        super().__init__(
-            relation=relation,
-            component=component,
-            scope=Scope.UNIT,
-        )
-
     def get(self) -> Any:
         """Returns the value of the key."""
         return self.relation_data.get(

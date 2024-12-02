@@ -67,8 +67,8 @@ class WorkloadBase(ABC):
         return self.restart()
 
     @abstractmethod
-    def stop(self) -> bool:
-        """Stops the workload service."""
+    def halt(self) -> bool:
+        """Halts the workload service."""
         ...
 
     @abstractmethod
@@ -89,6 +89,16 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
+    def to(self, transition: DPBenchmarkWorkloadLifecycleState):
+        """Transition the workload to a new state."""
+        ...
+
+    @abstractmethod
+    def state(self) -> DPBenchmarkWorkloadLifecycleState:
+        """Return the current workload state."""
+        ...
+
+    @abstractmethod
     def write(self, content: str, path: str, mode: str = "w") -> None:
         """Writes content to a workload file.
 
@@ -97,11 +107,6 @@ class WorkloadBase(ABC):
             path: the full filepath to write to
             mode: the write mode. Usually "w" for write, or "a" for append. Default "w"
         """
-        ...
-
-    @abstractmethod
-    def is_running_on_k8s(self) -> bool:
-        """Returns True if running on k8s env."""
         ...
 
     @abstractmethod
@@ -132,12 +137,12 @@ class WorkloadBase(ABC):
             and self.paths.exists(self.paths.service)
         )
 
-    def is_running(self) -> bool:
-        """Checks if the benchmark service is running."""
+    def is_executing(self) -> bool:
+        """Checks if the benchmark service is executing."""
         return self.is_prepared() and self.check_service() == DPBenchmarkServiceState.RUNNING
 
-    def is_stopped(self) -> bool:
-        """Checks if the benchmark service has stopped."""
+    def is_halted(self) -> bool:
+        """Checks if the benchmark service has halted."""
         return self.is_prepared() and not self.is_running() and not self.is_failed()
 
     @abstractmethod
