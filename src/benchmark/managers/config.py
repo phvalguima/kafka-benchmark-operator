@@ -144,6 +144,12 @@ class ConfigManager:
         """Checks if the benchmark service has passed its "prepare" status."""
         return self._check(DPBenchmarkLifecycleTransition.CLEAN) and self.workload.is_halted()
 
+    def is_failed(
+        self,
+    ) -> bool:
+        """Checks if the benchmark service has failed."""
+        return self.workload.is_failed()
+
     def _render_params(
         self,
         dst_path: str | None = None,
@@ -177,7 +183,9 @@ class ConfigManager:
         self,
         transition: DPBenchmarkLifecycleTransition,
     ) -> bool:
-        values = self.get_execution_options().dict() | {
+        if not (values := self.get_execution_options()):
+            return False
+        values = values.dict() | {
             "charm_root": os.environ.get("CHARM_DIR", ""),
             "command": transition.value,
         }

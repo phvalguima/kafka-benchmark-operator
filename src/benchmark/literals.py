@@ -3,7 +3,7 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-from enum import StrEnum
+from enum import Enum
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
@@ -13,14 +13,14 @@ LIFECYCLE_KEY = "lifecycle"
 STOP_KEY = "stop"
 
 
-class Substrate(StrEnum):
+class Substrate(Enum):
     """Substrate of the benchmark."""
 
     VM = "vm"
     K8S = "k8s"
 
 
-class Scope(StrEnum):
+class Scope(Enum):
     """Scope of the benchmark."""
 
     UNIT = "unit"
@@ -68,7 +68,7 @@ class DPBenchmarkDBRelationNotAvailableError(DPBenchmarkError):
     """Sysbench failed to execute a command."""
 
 
-class DPBenchmarkLifecycleState(StrEnum):
+class DPBenchmarkLifecycleState(Enum):
     """Benchmark lifecycle representation.
 
     The status are:
@@ -95,7 +95,7 @@ class DPBenchmarkLifecycleState(StrEnum):
     STOPPED = "stopped"
 
 
-class DPBenchmarkLifecycleTransition(StrEnum):
+class DPBenchmarkLifecycleTransition(Enum):
     """Benchmark lifecycle transition representation."""
 
     PREPARE = "prepare"
@@ -104,7 +104,7 @@ class DPBenchmarkLifecycleTransition(StrEnum):
     CLEAN = "clean"
 
 
-class DPBenchmarkWorkloadLifecycleState(StrEnum):
+class DPBenchmarkWorkloadLifecycleState(Enum):
     """Benchmark lifecycle state representation."""
 
     PREPARE = "prepare"
@@ -112,7 +112,7 @@ class DPBenchmarkWorkloadLifecycleState(StrEnum):
     STOP = "stop"
 
 
-class DPBenchmarkWorkloadState(StrEnum):
+class DPBenchmarkWorkloadState(Enum):
     """Represents the different states of the benchmark service."""
 
     RUNNING = "running"
@@ -120,7 +120,7 @@ class DPBenchmarkWorkloadState(StrEnum):
     FAILED = "failed"
 
 
-class DPBenchmarkRelationLifecycle(StrEnum):
+class DPBenchmarkRelationLifecycle(Enum):
     """Represents the different status of a mandatory relation."""
 
     NOT_AVAILABLE = "not_available"

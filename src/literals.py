@@ -3,7 +3,6 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-from benchmark.core.models import DPBenchmarkExecutionExtraConfigsModel
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
@@ -34,16 +33,3 @@ class DPBenchmarkExecFailedError(DPBenchmarkError):
 
 class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
-
-
-class OpenSearchExecutionExtraConfigsModel(DPBenchmarkExecutionExtraConfigsModel):
-    """OpenSearch execution model's extra configuration."""
-
-    run_count: int = 0
-    test_mode: bool = False
-
-    def __str__(self):
-        """Return the string representation of the model."""
-        if self.test_mode:
-            return f"{super().__str__()} --test_mode"
-        return super().__str__()

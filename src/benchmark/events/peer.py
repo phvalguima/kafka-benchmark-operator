@@ -29,6 +29,10 @@ class PeerRelationHandler(Object):
             self.charm.on[self.relation_name].relation_changed,
             self._on_peer_changed,
         )
+        self.framework.observe(
+            self.charm.on[self.relation_name].relation_departed,
+            self._on_peer_changed,
+        )
 
     @abstractmethod
     def workers(self) -> list[str]:

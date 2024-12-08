@@ -10,11 +10,14 @@ as changes in the configuration.
 
 import logging
 from typing import Any
+from overrides import override
 
 from ops.charm import CharmBase, CharmEvents
-from ops.framework import EventBase, EventSource, Object
+from ops.framework import EventBase, EventSource
 
 from benchmark.literals import DPBenchmarkMissingOptionsError
+from benchmark.core.models import DatabaseState, RelationState
+from benchmark.events.handler import RelationHandler
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ class DatabaseHandlerEvents(CharmEvents):
     db_config_update = EventSource(DatabaseConfigUpdateNeededEvent)
 
 
-class DatabaseRelationHandler(Object):
+class DatabaseRelationHandler(RelationHandler):
     """Listens to all the DB-related events and react to them.
 
     This class will provide the charm with the necessary data to connect to the DB as
@@ -43,11 +46,8 @@ class DatabaseRelationHandler(Object):
         charm: CharmBase,
         relation_name: str,
     ):
-        super().__init__(charm, None)
+        super().__init__(charm, relation_name)
         self.database_key = "database"
-        self.charm = charm
-        self.relation = self.charm.model.get_relation(relation_name)
-        self.relation_name = relation_name
 
         self.framework.observe(
             self.charm.on[self.relation_name].relation_joined,
@@ -58,6 +58,15 @@ class DatabaseRelationHandler(Object):
         )
         self.framework.observe(
             self.charm.on[self.relation_name].relation_broken, self._on_endpoints_changed
+        )
+
+    @property
+    @override
+    def state(self) -> RelationState:
+        """Returns the state of the database."""
+        return DatabaseState(
+            component=self.charm.app,
+            relation=self.relation,
         )
 
     def _on_endpoints_changed(self, event: EventBase) -> None:

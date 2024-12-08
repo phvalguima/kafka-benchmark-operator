@@ -27,11 +27,14 @@ from overrides import override
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.core.models import (
     DatabaseState,
+    RelationState,
 )
 from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
-from benchmark.events.peer import PeersRelationHandler
+from benchmark.events.peer import PeerRelationHandler
 from benchmark.managers.config import ConfigManager
+from benchmark.literals import PEER_RELATION
+
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 
 # Log messages can be retrieved using juju debug-log
@@ -64,7 +67,6 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         relation_name: str,
     ):
         super().__init__(charm, relation_name)
-        self.state = KafkaDatabaseState(self.charm.app, self.relation, client=self.client)
         # self.charm.framework.observe(
         #     self.kafka_cluster.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         # )
@@ -73,8 +75,13 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
 
         self.consumer_prefix = f"{self.charm.model.name}-{self.charm.app.name}-benchmark-consumer"
 
-    @override
     @property
+    @override
+    def state(self) -> RelationState:
+        return KafkaDatabaseState(self.charm.app, self.relation)
+
+    @property
+    @override
     def client(self) -> Any:
         """Returns the data_interfaces client corresponding to the database."""
         return KafkaRequires(
@@ -98,7 +105,7 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         return self.client.tls, self.client.tls_ca
 
 
-class KafkaPeersRelationHandler(PeersRelationHandler):
+class KafkaPeersRelationHandler(PeerRelationHandler):
     """Listens to all the peer-related events and react to them."""
 
     @override
@@ -151,13 +158,15 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
         )
         self.config_manager = KafkaConfigManager(
             workload=self.workload,
-            database=self.database.state,
+            database=self.database,
+            peer=KafkaPeersRelationHandler(self, PEER_RELATION),
             config=self.config,
         )
-
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
+
+    def supported_workloads(self) -> list[str]:
+        """List of supported workloads."""
+        return ["default"]
 
     def _on_config_changed(self, event: EventBase) -> None:
         # We need to narrow the options of workload_name to the supported ones

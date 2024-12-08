@@ -83,35 +83,20 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def __init__(self, *args, db_relation_name: str):
         super().__init__(*args)
-        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
         self.framework.observe(self.on.prepare_action, self.on_prepare_action)
         self.framework.observe(self.on.run_action, self.on_run_action)
         self.framework.observe(self.on.stop_action, self.on_stop_action)
-        self.framework.observe(self.on.clean_action, self.on_clean_action)
-
-        # Peer relation endpoints
-        self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_joined,
-            self._on_peer_changed,
-        )
-        self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_changed,
-            self._on_peer_changed,
-        )
-        self.framework.observe(
-            self.charm.on[PEER_RELATION].relation_broken,
-            self._on_peer_changed,
-        )
+        self.framework.observe(self.on.cleanup_action, self.on_clean_action)
 
         self.framework.observe(
-            self.charm.on.check_upload,
+            self.on.check_upload,
             self._on_check_upload,
         )
         self.framework.observe(
-            self.charm.on.check_collect,
+            self.on.check_collect,
             self._on_check_collect,
         )
 
@@ -137,12 +122,13 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.config_manager = ConfigManager(
             workload=self.workload,
             database=self.database.state,
+            peer=self.peers,
             config=self.config,
-            labes=self.labels,
+            labels=self.labels,
         )
 
     @abstractmethod
-    def supported_workload(self) -> list[str]:
+    def supported_workloads(self) -> list[str]:
         """List of supported workloads."""
         ...
 

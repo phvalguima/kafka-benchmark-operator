@@ -17,7 +17,7 @@ from overrides import override
 
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.literals import (
-    DPBenchmarkServiceState,
+    DPBenchmarkLifecycleState,
 )
 
 
@@ -67,22 +67,25 @@ class DPBenchmarkPebbleWorkloadBase(WorkloadBase):
         super().__init__()
         self.paths = DPBenchmarkPebbleTemplatePaths()
 
+    def install(self) -> bool:
+        """Installs the workload."""
+        pass
+
+    def start(self) -> bool:
+        """Starts the workload service."""
+        pass
+
     @override
     def restart(self) -> bool:
         """Restarts the benchmark service."""
         return service_restart(self.paths.svc_name)
 
     @override
-    def stop(self) -> bool:
+    def halt(self) -> bool:
         """Stop the benchmark service."""
         if self.is_running():
             return service_stop(self.paths.svc_name)
         return self.is_stopped()
-
-    @override
-    def active(self) -> bool:
-        """Checks that the workload is active."""
-        return self.check_service() == DPBenchmarkServiceState.RUNNING
 
     @override
     def read(self, path: str) -> list[str]:
@@ -111,6 +114,30 @@ class DPBenchmarkPebbleWorkloadBase(WorkloadBase):
             f.write(content)
             os.chmod(path, 0o640)
 
-    def is_running_on_k8s(self) -> bool:
-        """Returns True if running on k8s env."""
-        return False
+    @override
+    def exec(
+        self,
+        command: list[str] | str,
+        env: dict[str, str] | None = None,
+        working_dir: str | None = None,
+    ) -> str | None:
+        """Executes a command on the workload substrate.
+
+        Returns None if the command failed to be executed.
+        """
+        ...
+
+    @override
+    def is_active(self) -> bool:
+        """Checks that the workload is active."""
+        ...
+
+    @override
+    def _is_stopped(self) -> bool:
+        """Checks that the workload is stopped."""
+        ...
+
+    @override
+    def is_failed(self) -> bool:
+        """Checks if the benchmark service has failed."""
+        ...
