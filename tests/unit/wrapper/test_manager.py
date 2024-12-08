@@ -28,7 +28,7 @@ ARGS = core.WorkloadCLIArgsModel(
     threads=1,
     duration=0,
     run_count=1,
-    target_hosts=["localhost"],
+    target_hosts="localhost",
     report_interval=10,
 )
 

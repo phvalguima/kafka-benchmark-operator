@@ -16,8 +16,8 @@ This charm should also be the main entry point to all the modelling of your benc
 
 import logging
 import subprocess
-from typing import Any
 from abc import ABC, abstractmethod
+from typing import Any
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -39,7 +39,6 @@ from benchmark.literals import (
     COS_AGENT_RELATION,
     METRICS_PORT,
     PEER_RELATION,
-    DPBenchmarkError,
     DPBenchmarkLifecycleTransition,
     DPBenchmarkMissingOptionsError,
 )
@@ -120,7 +119,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.peers = PeerRelationHandler(self, PEER_RELATION)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
-        # self.workload = workload_builder()
+        self.workload = workload_build()
 
         self.lifecycle = LifecycleManager(self.peers, self.workload)
 
@@ -155,7 +154,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _on_check_collect(self, event: EventBase) -> None:
         """Check if the upload is finished."""
-        if self.workload.is_collecting():
+        if self.config_manager.is_collecting():
             # Nothing to do, upload is still in progress
             event.defer()
             return
@@ -169,7 +168,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _on_check_upload(self, event: EventBase) -> None:
         """Check if the upload is finished."""
-        if self.workload.is_uploading():
+        if self.config_manager.is_uploading():
             # Nothing to do, upload is still in progress
             event.defer()
             return
@@ -194,49 +193,35 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _set_status(self) -> None:
         """Recovers the benchmark status."""
-        if self.workload.is_failed():
+        if self.config_manager.is_failed():
             self.unit.status = BlockedStatus("Benchmark failed, please check logs")
-        elif self.workload.is_running():
+        elif self.config_manager.is_running():
             self.unit.status = ActiveStatus("Benchmark is running")
-        elif self.workload.is_prepared():  # and self.peer_state.is_prepared():
+        elif self.config_manager.is_prepared():  # and self.peer_state.is_prepared():
             self.unit.status = WaitingStatus("Benchmark is prepared: execute run to start")
-        elif self.workload.is_stopped():
+        elif self.config_manager.is_stopped():
             self.unit.status = BlockedStatus("Benchmark is stopped after run")
         else:
             self.unit.status = ActiveStatus()
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
-        if not self.workload.is_prepared():
+        if not self.config_manager.is_prepared():
             # nothing to do: set the status and leave
             self._set_status()
             return
-        try:
-            # First, we check if the status of the service
-            if not self.database.state.get():
-                logger.debug("The benchmark is not ready")
-                return
-            if not self.stop():
-                logger.warning("Config changed: tried stopping the service but returned False")
-                raise DPBenchmarkError()
-            if not self.clean_up():
-                logger.info("Config changed: tried cleaning up the service but returned False")
-                raise DPBenchmarkError()
-            if not self.prepare():
-                logger.info("Config changed: tried preparing the service but returned False")
-                raise DPBenchmarkError()
 
-            # We must set the file, as we were not UNSET:
-            if self.workload.state.is_running() or self.workload.state.is_error():
-                self.run()
-        except DPBenchmarkError:
+        if not self.config_manager.is_stopped() or not self.config_manager.stop():
+            # The stop process may be async so we defer
+            logger.warning("Config changed: tried stopping the service but returned False")
             event.defer()
-
+            return
+        self.config_manager.run()
         self._set_status()
 
     def _on_relation_broken(self, _: EventBase) -> None:
-        self.stop()
-        self.clean_up()
+        self.config_manager.stop()
+        self.config_manager.clean()
 
     def scrape_config(self) -> list[dict[str, Any]]:
         """Generate scrape config for the Patroni metrics endpoint."""
@@ -254,6 +239,10 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     #  Action and Lifecycle Handlers
     #
     ###########################################################################
+
+    def _preflight_checks(self) -> bool:
+        """Check if we have the necessary relations."""
+        return bool(self.database.state.get()) and bool(self.peers.state.get())
 
     def on_prepare_action(self, event: EventBase) -> None:
         """Process the prepare action."""
@@ -300,12 +289,20 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not (state := self.lifecycle.next(transition)):
             return False
 
-        # Calculate if we have a workload change:
-        if next_workload_state := self.workload_lifecycle(state):
-            self.workload.to(next_workload_state)
+        result = False
+        if state == DPBenchmarkLifecycleState.PREPARING and self.config_manager.prepare():
+            result = True
+        elif state == DPBenchmarkLifecycleState.RUNNING and self.config_manager.run():
+            result = True
+        elif state == DPBenchmarkLifecycleState.STOPPED and self.config_manager.stop():
+            result = True
+        elif state == DPBenchmarkLifecycleState.UNSET and self.config_manager.clean():
+            result = True
 
-        # Now, we update our state:
-        self.lifecycle.update(state)
+        if result:
+            # Now, we update our state:
+            self.lifecycle.update(state)
+        return result
 
     ###########################################################################
     #

@@ -3,10 +3,10 @@
 
 """The peer event class."""
 
+from abc import abstractmethod
+
 from ops.framework import Object
 from ops.model import Unit
-
-from abc import abstractmethod
 
 from benchmark.core.models import PeerState
 from benchmark.literals import Scope
@@ -24,6 +24,7 @@ class PeerRelationHandler(Object):
         self.charm = charm
         self.relation = self.charm.model.get_relation(relation_name)
         self.relation_name = relation_name
+        self.state = PeerState(self.charm.unit, self.relation)
         self.framework.observe(
             self.charm.on[self.relation_name].relation_changed,
             self._on_peer_changed,

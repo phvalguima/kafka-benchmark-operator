@@ -16,13 +16,10 @@ the user.
 """
 
 import logging
-import os
-from typing import Any
+from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
-
-from literals import TOPIC_NAME, CLIENT_RELATION_NAME
 from ops.charm import CharmBase, EventBase
 from ops.model import Application, BlockedStatus, Relation, Unit
 from overrides import override
@@ -31,38 +28,19 @@ from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.core.models import (
     DatabaseState,
 )
+from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
-from benchmark.managers.config import ConfigManager
-from benchmark.core.systemd_workload_base import DPBenchmarkSystemdService
 from benchmark.events.peer import PeersRelationHandler
+from benchmark.managers.config import ConfigManager
+from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
 
 
-class KafkaConfigManager(ConfigManager):
-    """The config manager class."""
-
-    def __init__(
-        self,
-        workload: DPBenchmarkSystemdService,
-        database: DatabaseState,
-        config: dict[str, Any],
-    ):
-        self.workload = workload
-        self.config = config
-        self.database = database
-
-    @override
-    def get_workload_params(self) -> dict[str, Any]:
-        """Return the workload parameters."""
-        return {
-
-        }
-
-
 class KafkaDatabaseState(DatabaseState):
     """State collection for the database relation."""
+
     def __init__(self, component: Application | Unit, relation: Relation | None):
         super().__init__(
             component=component,
@@ -87,6 +65,13 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
     ):
         super().__init__(charm, relation_name)
         self.state = KafkaDatabaseState(self.charm.app, self.relation, client=self.client)
+        # self.charm.framework.observe(
+        #     self.kafka_cluster.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
+        # )
+        # self.charm.framework.observe(self.kafka_cluster.on.topic_created, self._on_kafka_topic_created)
+        # self.charm.framework.observe(self.on[KAFKA_CLUSTER].relation_broken, self._on_relation_broken)
+
+        self.consumer_prefix = f"{self.charm.model.name}-{self.charm.app.name}-benchmark-consumer"
 
     @override
     @property
@@ -97,10 +82,24 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
             self.relation_name,
             TOPIC_NAME,
             extra_user_roles="admin",
+            consumer_group_prefix=self.consumer_prefix,
         )
+
+    def bootstrap_servers(self) -> str | None:
+        """Return the bootstrap servers."""
+        return self.client.endpoints
+
+    def tls(self) -> tuple[str, str] | None:
+        """Return the tls."""
+        if not self.client.tls:
+            return None, None
+        if not self.client.tls_ca:
+            return self.client.tls, None
+        return self.client.tls, self.client.tls_ca
 
 
 class KafkaPeersRelationHandler(PeersRelationHandler):
+    """Listens to all the peer-related events and react to them."""
 
     @override
     def workers(self) -> list[str]:
@@ -110,6 +109,34 @@ class KafkaPeersRelationHandler(PeersRelationHandler):
             for u in self.units() + [self.this_unit()]
             for port in range(8080, 8080 + self.charm.config.get("parallel_processes"))
         ]
+
+
+class KafkaConfigManager(ConfigManager):
+    """The config manager class."""
+
+    def __init__(
+        self,
+        workload: WorkloadBase,
+        database: KafkaDatabaseRelationHandler,
+        peer: KafkaPeersRelationHandler,
+        config: dict[str, Any],
+        labels: Optional[str] = "",
+    ):
+        self.workload = workload
+        self.config = config
+        self.peer = peer
+        self.database = database
+        self.labels = labels
+
+    @override
+    def get_workload_params(self) -> dict[str, Any]:
+        """Return the workload parameters."""
+        return {
+            "total_number_of_brokers": len(self.peer.units()) + 1,
+            "list_of_brokers_bootstrap": self.database.bootstrap_servers(),
+            "username": self.database.client.username,
+            "password": self.database.client.password,
+        }
 
 
 class KafkaBenchmarkOperator(DPBenchmarkCharmBase):

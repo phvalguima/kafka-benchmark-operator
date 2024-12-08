@@ -10,9 +10,7 @@ must implement most of the WorkloadBase methods.
 import os
 
 from charms.operator_libs_linux.v1.systemd import (
-    service_failed,
     service_restart,
-    service_running,
     service_stop,
 )
 from overrides import override

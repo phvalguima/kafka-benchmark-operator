@@ -14,9 +14,6 @@ from typing import Any
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
 
-from benchmark.core.models import (
-    DatabaseState,
-)
 from benchmark.literals import DPBenchmarkMissingOptionsError
 
 logger = logging.getLogger(__name__)
@@ -50,7 +47,6 @@ class DatabaseRelationHandler(Object):
         self.database_key = "database"
         self.charm = charm
         self.relation = self.charm.model.get_relation(relation_name)
-        self.state = DatabaseState(self.charm.app, self.relation)
         self.relation_name = relation_name
 
         self.framework.observe(

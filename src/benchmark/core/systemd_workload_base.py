@@ -7,8 +7,8 @@ Its implementation follows the WorkloadBase interface. The final workload class
 must implement most of the WorkloadBase methods.
 """
 
-import subprocess
 import os
+import subprocess
 
 from charms.operator_libs_linux.v1.systemd import (
     service_failed,
@@ -18,7 +18,11 @@ from charms.operator_libs_linux.v1.systemd import (
 )
 from overrides import override
 
-from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths, WorkloadParamsTemplateBase
+from benchmark.core.workload_base import (
+    WorkloadBase,
+    WorkloadParamsTemplateBase,
+    WorkloadTemplatePaths,
+)
 
 
 class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
@@ -73,7 +77,9 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
 class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
 
-    def __init__(self, workload_params_template: WorkloadParamsTemplateBase = WorkloadParamsTemplateBase()):
+    def __init__(
+        self, workload_params_template: WorkloadParamsTemplateBase = WorkloadParamsTemplateBase()
+    ):
         super().__init__()
         self.paths = DPBenchmarkSystemdTemplatePaths()
         self.workload_params_template = workload_params_template
@@ -133,12 +139,14 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
         command: list[str] | str,
         env: dict[str, str] | None = None,
         working_dir: str | None = None,
-    ) -> str|None:
+    ) -> str | None:
         """Executes a command on the workload substrate."""
         exec_env = (env or {}) | os.environ.copy()
         try:
-            output = subprocess.run(command, cwd=working_dir, env=exec_env, shell=True, capture_output=True)
-        except subprocess.CalledProcessError as e:
+            output = subprocess.run(
+                command, cwd=working_dir, env=exec_env, shell=True, capture_output=True
+            )
+        except subprocess.CalledProcessError:
             return None
         return output or ""
 

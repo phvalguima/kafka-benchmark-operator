@@ -38,6 +38,7 @@ class BenchmarkProcess(ABC):
     metrics that need to be uploaded to Prometheus OR when the output is just a log
     line to keep track of the information.
     """
+
     def __init__(
         self,
         model: ProcessModel,

@@ -6,9 +6,12 @@
 
 import argparse
 
-from benchmark.wrapper.core import WorkloadCLIArgsModel, ProcessStatus, BenchmarkCommand, ProcessModel
+from benchmark.wrapper.core import (
+    ProcessModel,
+    WorkloadCLIArgsModel,
+)
 from benchmark.wrapper.main import main
-from benchmark.wrapper.process import WorkloadToProcessMapping, BenchmarkManager, BenchmarkProcess
+from benchmark.wrapper.process import BenchmarkManager, BenchmarkProcess, WorkloadToProcessMapping
 
 
 class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
@@ -42,7 +45,6 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
 
     def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the clean phase."""
-        
 
 
 if __name__ == "__main__":
@@ -56,7 +58,9 @@ if __name__ == "__main__":
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--duration", type=int, default=0)
     parser.add_argument("--run_count", type=int, default=1)
-    parser.add_argument("--target_hosts", type=str, default="", description="comma-separated list of target hosts")
+    parser.add_argument(
+        "--target_hosts", type=str, default="", description="comma-separated list of target hosts"
+    )
     parser.add_argument(
         "--extra_labels",
         type=str,

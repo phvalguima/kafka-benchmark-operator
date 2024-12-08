@@ -123,7 +123,7 @@ class WorkloadBase(ABC):
         command: list[str] | str,
         env: dict[str, str] | None = None,
         working_dir: str | None = None,
-    ) -> str|None:
+    ) -> str | None:
         """Executes a command on the workload substrate.
 
         Returns None if the command failed to be executed.

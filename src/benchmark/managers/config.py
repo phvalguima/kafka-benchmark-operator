@@ -13,10 +13,11 @@ from typing import Any, Optional
 from jinja2 import DictLoader, Environment, FileSystemLoader, exceptions
 
 from benchmark.core.models import (
-    DatabaseState,
     DPBenchmarkWrapperOptionsModel,
 )
 from benchmark.core.workload_base import WorkloadBase
+from benchmark.events.db import DatabaseRelationHandler
+from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import DPBenchmarkLifecycleTransition
 
 
@@ -26,12 +27,14 @@ class ConfigManager:
     def __init__(
         self,
         workload: WorkloadBase,
-        database: DatabaseState,
+        database: DatabaseRelationHandler,
+        peer: PeerRelationHandler,
         config: dict[str, Any],
         labels: Optional[str] = "",
     ):
         self.workload = workload
         self.config = config
+        self.peer = peer
         self.database = database
         self.labels = labels
 
@@ -47,7 +50,7 @@ class ConfigManager:
         Raises:
             DPBenchmarkMissingOptionsError: If the database is not ready.
         """
-        if not (db := self.database.get()):
+        if not (db := self.database.state.get()):
             # It means we are not yet ready. Return None
             # This check also serves to ensure we have only one valid relation at the time
             return None
@@ -193,8 +196,8 @@ class ConfigManager:
     def _render(
         self,
         values: dict[str, Any],
-        template_file: str|None,
-        template_content: str|None,
+        template_file: str | None,
+        template_content: str | None,
         dst_filepath: str | None = None,
     ) -> str:
         """Renders from a file or an string content and return final rendered value."""
@@ -203,7 +206,9 @@ class ConfigManager:
                 template_env = Environment(loader=FileSystemLoader(self.workload.paths.templates))
                 template = template_env.get_template(template_file)
             else:
-                template_env = Environment(loader=DictLoader({"workload_params": template_content}))
+                template_env = Environment(
+                    loader=DictLoader({"workload_params": template_content})
+                )
                 template = template_env.get_template("workload_params")
             content = template.render(values)
         except exceptions.TemplateNotFound as e:
