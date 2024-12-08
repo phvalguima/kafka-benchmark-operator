@@ -66,14 +66,13 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         charm: CharmBase,
         relation_name: str,
     ):
+        self.consumer_prefix = f"{charm.model.name}-{charm.app.name}-benchmark-consumer"
         super().__init__(charm, relation_name)
         # self.charm.framework.observe(
         #     self.kafka_cluster.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
         # )
         # self.charm.framework.observe(self.kafka_cluster.on.topic_created, self._on_kafka_topic_created)
         # self.charm.framework.observe(self.on[KAFKA_CLUSTER].relation_broken, self._on_relation_broken)
-
-        self.consumer_prefix = f"{self.charm.model.name}-{self.charm.app.name}-benchmark-consumer"
 
     @property
     @override
@@ -156,10 +155,11 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             self,
             CLIENT_RELATION_NAME,
         )
+        self.peer_handler = KafkaPeersRelationHandler(self, PEER_RELATION)
         self.config_manager = KafkaConfigManager(
             workload=self.workload,
             database=self.database,
-            peer=KafkaPeersRelationHandler(self, PEER_RELATION),
+            peer=self.peer_handler,
             config=self.config,
         )
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)

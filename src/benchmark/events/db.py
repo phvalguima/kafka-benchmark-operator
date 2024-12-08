@@ -59,8 +59,9 @@ class DatabaseRelationHandler(RelationHandler):
         self.framework.observe(
             self.charm.on[self.relation_name].relation_broken, self._on_endpoints_changed
         )
+        # Forces the creation of a new client
+        self._internal_client = self.client
 
-    @property
     @override
     def state(self) -> RelationState:
         """Returns the state of the database."""
