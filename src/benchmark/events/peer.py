@@ -6,7 +6,10 @@
 from ops.framework import Object
 from ops.model import Unit
 
+from abc import abstractmethod
+
 from benchmark.core.models import PeerState
+from benchmark.literals import Scope
 
 
 class PeerRelationHandler(Object):
@@ -26,22 +29,35 @@ class PeerRelationHandler(Object):
             self._on_peer_changed,
         )
 
+    @abstractmethod
+    def workers(self) -> list[str]:
+        """Return the peer workers."""
+        ...
+
     def _on_peer_changed(self, _):
         """Handle the relation-changed event."""
         self.charm.lifecycle_update()
 
     def units(self) -> list[Unit]:
-        """Return the peer unit."""
+        """Return the peer units."""
         return self.relation.units
 
     def this_unit(self) -> Unit:
         """Return the current unit."""
-        return self.charm.unit
+        return self.relation.unit
 
     def unit_state(self, unit: Unit) -> PeerState:
         """Return the unit data."""
-        return self.relation.data[unit]
+        return PeerState(
+            component=unit,
+            relation=self.relation,
+            scope=Scope.UNIT,
+        )
 
     def app_state(self) -> PeerState:
         """Return the app data."""
-        return self.relation.data[self.charm.app]
+        return PeerState(
+            component=self.relation.app,
+            relation=self.relation,
+            scope=Scope.APP,
+        )

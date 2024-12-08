@@ -30,7 +30,7 @@ options:
       Number of counts to run, 0 means indefinitely.
       If both duration and run_count are set, duration takes precedence.
   workload_name:
-    default: "nyc_taxis"
+    default: "default"
     type: string
     description: |
       The name of the workload to be prepared and used.

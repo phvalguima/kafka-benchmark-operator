@@ -1,0 +1,17 @@
+{
+    "summary": "DPE benchmark layer",
+    "description": "Pebble config layer for the benchmark service",
+    "services": {
+        BROKER.service: {
+            "override": "merge",
+            "summary": "benchmark service",
+            "command": {{ charm_root }}/src/benchmark/wrapper/main.py --command={{ command }} --workload={{ workload }} --threads={{ threads }} --clients={{ clients }} --duration={{ duration }} --workload_params={{ workload_params }} --extra_labels={{ extra_labels }} {{ extra_config }},
+            "startup": "enabled",
+            "user": {{ user }},
+            "group": {{ group }},
+            "environment": {
+                PYTHONPATH={{ charm_root }}/lib:{{ charm_root }}/venv:{{ charm_root }}/src/benchmark/wrapper
+            }
+        }
+    }
+}

@@ -9,19 +9,19 @@ Given the workload is pretty simple, we will coalesce both transition and state 
 DPBenchmarkWorkloadLifecycleState
 """
 
-from benchmark.core.workload_base import WorkloadBase
 from benchmark.literals import (
     DPBenchmarkLifecycleState,
     DPBenchmarkWorkloadLifecycleState,
     DPBenchmarkWorkloadState,
 )
+from benchmark.managers.config import ConfigManager
 
 
 class WorkloadLifecycleManager:
     """The workload lifecycle manager class."""
 
-    def __init__(self, workload: WorkloadBase):
-        self.workload = workload
+    def __init__(self, config: ConfigManager):
+        self.config = config
 
     def current(self) -> DPBenchmarkWorkloadState:
         """Return the current lifecycle state."""
@@ -34,7 +34,7 @@ class WorkloadLifecycleManager:
         if charm_state == DPBenchmarkLifecycleState.STOPPED:
             return DPBenchmarkWorkloadLifecycleState.STOP
 
-        if self.workload.is_active():
+        if self.config.is_running():
             # We do not transition to any other state while executing
             return None
 

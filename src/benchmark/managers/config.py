@@ -7,9 +7,10 @@ This class summarizes all the configuration needed for the workload execution
 and returns a model containing that information.
 """
 
+import os
 from typing import Any, Optional
 
-from jinja2 import Environment, FileSystemLoader, exceptions
+from jinja2 import DictLoader, Environment, FileSystemLoader, exceptions
 
 from benchmark.core.models import (
     DatabaseState,
@@ -146,9 +147,10 @@ class ConfigManager:
     ) -> str | None:
         """Render the workload parameters."""
         return self._render(
-            self.workload.paths.workload_params_template,
-            self.get_workload_params(),
-            dst_path,
+            values=self.get_workload_params(),
+            template_file=self.workload.paths.service_template,
+            template_content=None,
+            dst_filepath=dst_path,
         )
 
     def _render_service(
@@ -158,13 +160,14 @@ class ConfigManager:
     ) -> str | None:
         """Render the workload parameters."""
         values = self.get_execution_options().dict() | {
-            "charm_root": self.workload.paths.charm_root,
+            "charm_root": os.environ.get("CHARM_DIR", ""),
             "command": transition.value,
         }
         return self._render(
-            self.workload.paths.service_template,
-            values,
-            dst_path,
+            values=values,
+            template_file=self.workload.paths.service_template,
+            template_content=None,
+            dst_filepath=dst_path,
         )
 
     def _check(
@@ -172,34 +175,39 @@ class ConfigManager:
         transition: DPBenchmarkLifecycleTransition,
     ) -> bool:
         values = self.get_execution_options().dict() | {
-            "charm_root": self.workload.paths.charm_root,
+            "charm_root": os.environ.get("CHARM_DIR", ""),
             "command": transition.value,
         }
         return self.workload.read(self.workload.paths.service) == self._render(
-            self.workload.paths.service_template,
-            values,
+            values=values,
+            template_file=self.workload.paths.service_template,
+            template_content=None,
+            dst_filepath=None,
         ) and self.workload.read(self.workload.paths.workload_params) == self._render(
-            self.workload.paths.workload_params_template,
-            self.get_workload_params(),
+            values=self.get_workload_params(),
+            template_file=None,
+            template_content=self.workload.workload_params_template,
+            dst_filepath=None,
         )
 
     def _render(
         self,
-        template_file: str,
         values: dict[str, Any],
+        template_file: str|None,
+        template_content: str|None,
         dst_filepath: str | None = None,
     ) -> str:
-        """Renders files and return its contents."""
-        template_env = Environment(loader=FileSystemLoader(self.workload.paths.templates))
+        """Renders from a file or an string content and return final rendered value."""
         try:
-            template = template_env.get_template(template_file)
+            if template_file:
+                template_env = Environment(loader=FileSystemLoader(self.workload.paths.templates))
+                template = template_env.get_template(template_file)
+            else:
+                template_env = Environment(loader=DictLoader({"workload_params": template_content}))
+                template = template_env.get_template("workload_params")
             content = template.render(values)
         except exceptions.TemplateNotFound as e:
             raise e
         if not dst_filepath:
             return content
         self.workload.write(content, dst_filepath)
-
-
-class SystemdConfigManager(ConfigManager):
-    """The config manager for systemd class."""

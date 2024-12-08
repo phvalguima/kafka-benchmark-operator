@@ -52,11 +52,10 @@ class WorkloadCLIArgsModel(BaseModel):
 
     test_name: str
     command: BenchmarkCommand
-    parallel_processes: int
     threads: int
     duration: int
     run_count: int
-    target_hosts: list[str]
+    target_hosts: str
     report_interval: int
 
 

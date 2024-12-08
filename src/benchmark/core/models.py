@@ -20,7 +20,6 @@ from benchmark.literals import (
     DPBenchmarkLifecycleState,
     DPBenchmarkMissingOptionsError,
     Scope,
-    Substrate,
 )
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
@@ -98,13 +97,6 @@ class DPBenchmarkWrapperOptionsModel(BaseModel):
 
     test_name: str
     parallel_processes: int
-    threads: int
-    duration: int
-    run_count: int
-    db_info: DPBenchmarkBaseDatabaseModel
-    workload_name: str
-    report_interval: int
-    workload_profile: str
     labels: Optional[str] = ""
 
 
@@ -115,11 +107,9 @@ class RelationState:
         self,
         component: Application | Unit,
         relation: Relation | None,
-        substrate: Substrate | None = Substrate.VM,
         scope: Scope = Scope.UNIT,
     ):
         self.relation = relation
-        self.substrate = substrate
         self.component = component
         self.scope = scope
 
@@ -219,4 +209,3 @@ class DatabaseState(RelationState):
             logger.warning(f"Failed to validate the database model: {e}")
             entries = [entry.get("loc")[0] for entry in e.errors()]
             raise DPBenchmarkMissingOptionsError(f"{entries}")
-        return None

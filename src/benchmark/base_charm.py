@@ -15,8 +15,9 @@ This charm should also be the main entry point to all the modelling of your benc
 """
 
 import logging
-from abc import ABC
+import subprocess
 from typing import Any
+from abc import ABC, abstractmethod
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
@@ -29,6 +30,9 @@ from ops.model import (
 )
 
 from benchmark.core.models import DPBenchmarkLifecycleState, PeerState
+from benchmark.core.pebble_workload_base import DPBenchmarkPebbleWorkloadBase
+from benchmark.core.systemd_workload_base import DPBenchmarkSystemdWorkloadBase
+from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
@@ -59,6 +63,16 @@ class DPBenchmarkEvents(CharmEvents):
 
     check_collect = EventSource(DPBenchmarkCheckCollectEvent)
     check_upload = EventSource(DPBenchmarkCheckUploadEvent)
+
+
+def workload_build() -> WorkloadBase:
+    """Build the workload."""
+    try:
+        # Really simple check to see if we have systemd
+        subprocess.check_output(["systemctl", "--help"])
+    except subprocess.CalledProcessError:
+        return DPBenchmarkPebbleWorkloadBase()
+    return DPBenchmarkSystemdWorkloadBase()
 
 
 class DPBenchmarkCharmBase(ops.CharmBase, ABC):
@@ -127,6 +141,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             config=self.config,
             labes=self.labels,
         )
+
+    @abstractmethod
+    def supported_workload(self) -> list[str]:
+        """List of supported workloads."""
+        ...
 
     ###########################################################################
     #

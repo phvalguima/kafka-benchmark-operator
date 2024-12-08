@@ -3,18 +3,34 @@
 
 """Supporting objects for Benchmark charm state."""
 
+import os
 from abc import ABC, abstractmethod
 
-from benchmark.literals import DPBenchmarkWorkloadLifecycleState
+
+class WorkloadParamsTemplateBase(ABC):
+    """Returns the workload parameters template.
+
+    Ideally, this class should be static and its template content remains the same across
+    different types of implementation (VM and k8s).
+    """
+
+    def template(self) -> str:
+        """Returns the workload parameters template."""
+        ...
 
 
 class WorkloadTemplatePaths(ABC):
     """Interface for workload template paths."""
 
     @property
-    @abstractmethod
     def benchmark_wrapper(self) -> str:
         """The main benchmark_wrapper managed by the service."""
+        os.path.join(os.environ.get("CHARM_DIR", ""), "src/benchmark/wrapper/main.py")
+
+    @property
+    @abstractmethod
+    def svc_name(self) -> str:
+        """The service name."""
         ...
 
     @property
@@ -36,20 +52,14 @@ class WorkloadTemplatePaths(ABC):
         ...
 
     @property
-    def workload_params_template(self) -> str:
-        """The path to the workload parameters template."""
-        ...
-
-    @property
     @abstractmethod
     def results(self) -> str:
         """The path to the results folder."""
         ...
 
-    @abstractmethod
     def exists(self, path: str) -> bool:
-        """Check if the workload template paths exist."""
-        ...
+        """Check if the workload path exist."""
+        return os.path.exists(path)
 
     @property
     @abstractmethod
@@ -57,41 +67,31 @@ class WorkloadTemplatePaths(ABC):
         """The path to the workload template folder."""
         ...
 
-    @property
-    @abstractmethod
-    def charm_root(self) -> str:
-        """The path to the charm root folder."""
-        ...
-
 
 class WorkloadBase(ABC):
     """Base interface for common workload operations."""
 
     paths: WorkloadTemplatePaths
+    workload_params_template: WorkloadParamsTemplateBase
 
     @abstractmethod
     def install(self) -> bool:
         """Installs the workload."""
         ...
 
+    @abstractmethod
     def start(self) -> bool:
         """Starts the workload service."""
         ...
 
     @abstractmethod
+    def restart(self) -> bool:
+        """Retarts the workload service."""
+        ...
+
+    @abstractmethod
     def halt(self) -> bool:
         """Halts the workload service."""
-        ...
-
-    @abstractmethod
-    def restart(self) -> bool:
-        """Restarts the workload service."""
-        ...
-
-    @property
-    @abstractmethod
-    def state(self) -> DPBenchmarkWorkloadLifecycleState:
-        """Return the current workload state."""
         ...
 
     @abstractmethod
@@ -123,8 +123,11 @@ class WorkloadBase(ABC):
         command: list[str] | str,
         env: dict[str, str] | None = None,
         working_dir: str | None = None,
-    ) -> str:
-        """Executes a command on the workload substrate."""
+    ) -> str|None:
+        """Executes a command on the workload substrate.
+
+        Returns None if the command failed to be executed.
+        """
         ...
 
     @abstractmethod
@@ -133,15 +136,15 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
-    def is_stopped(self) -> bool:
+    def _is_stopped(self) -> bool:
         """Checks that the workload is stopped."""
         ...
-
-    def is_halted(self) -> bool:
-        """Checks if the benchmark service has halted."""
-        return self._is_stopped() and not self.is_active() and not self.is_failed()
 
     @abstractmethod
     def is_failed(self) -> bool:
         """Checks if the benchmark service has failed."""
         ...
+
+    def is_halted(self) -> bool:
+        """Checks if the benchmark service has halted."""
+        return self._is_stopped() and not self.is_failed()

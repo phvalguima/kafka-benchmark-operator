@@ -38,7 +38,6 @@ class BenchmarkProcess(ABC):
     metrics that need to be uploaded to Prometheus OR when the output is just a log
     line to keep track of the information.
     """
-
     def __init__(
         self,
         model: ProcessModel,
@@ -185,15 +184,15 @@ class BenchmarkManager(BenchmarkProcess):
 class WorkloadToProcessMapping(ABC):
     """This class maps the workload model to the process."""
 
-    def __init__(self, args: WorkloadCLIArgsModel):
+    def __init__(self, args: WorkloadCLIArgsModel, metrics: BenchmarkMetrics):
         self.args = args
         self.manager = None
+        self.metrics = metrics
 
     def status(self) -> ProcessStatus:
         """Return the status of the benchmark."""
         return self.manager.status()
 
-    @abstractmethod
     def map(self, cmd: BenchmarkCommand) -> tuple[BenchmarkManager, list[BenchmarkProcess]]:
         """Processes high-level arguments into the benchmark manager and workers.
 

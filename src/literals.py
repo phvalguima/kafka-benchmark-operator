@@ -8,8 +8,8 @@ from benchmark.core.models import DPBenchmarkExecutionExtraConfigsModel
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
-INDEX_NAME = "benchmark_index"
-
+TOPIC_NAME = "benchmark_topic"
+CLIENT_RELATION_NAME = "kafka"
 
 METRICS_PORT = 8088
 COS_AGENT_RELATION = "cos-agent"
