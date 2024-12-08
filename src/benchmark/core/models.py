@@ -69,6 +69,8 @@ class DPBenchmarkBaseDatabaseModel(BaseModel):
     username: str
     password: str
     db_name: str
+    tls: str | None = None
+    tls_ca: str | None = None
 
     @root_validator(pre=False, skip_on_failure=True)
     @classmethod
@@ -181,13 +183,36 @@ class PeerState(RelationState):
 class DatabaseState(RelationState):
     """State collection for the database relation."""
 
-    def __init__(self, component: Application | Unit, relation: Relation | None):
+    def __init__(
+        self,
+        component: Application | Unit,
+        relation: Relation | None,
+        scope: Scope = Scope.APP,
+        data: dict[str, Any] = {},
+    ):
         self.database_key = "database"
         super().__init__(
             relation=relation,
             component=component,
-            scope=Scope.APP,
+            scope=scope,
         )
+        self.data = data
+
+    @property
+    def tls(self) -> str | None:
+        """Returns the TLS to connect to the database."""
+        tls = self.data.get("tls")
+        if not tls or tls == "disabled":
+            return None
+        return tls
+
+    @property
+    def tls_ca(self) -> str | None:
+        """Returns the TLS CA to connect to the database."""
+        tls_ca = self.data.get("tls_ca")
+        if not tls_ca or tls_ca == "disabled":
+            return None
+        return tls_ca
 
     def get(self) -> DPBenchmarkBaseDatabaseModel | None:
         """Returns the value of the key."""
@@ -201,9 +226,11 @@ class DatabaseState(RelationState):
             return DPBenchmarkBaseDatabaseModel(
                 hosts=endpoints.split(),
                 unix_socket=unix_socket,
-                username=self.remote_data.get("username"),
-                password=self.remote_data.get("password"),
+                username=self.data.get("username"),
+                password=self.data.get("password"),
                 db_name=self.remote_data.get(self.database_key),
+                tls=self.tls,
+                tls_ca=self.tls_ca,
             )
         except error_wrappers.ValidationError as e:
             logger.warning(f"Failed to validate the database model: {e}")

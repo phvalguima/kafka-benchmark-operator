@@ -228,7 +228,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _preflight_checks(self) -> bool:
         """Check if we have the necessary relations."""
-        return bool(self.database.state.get()) and bool(self.peers.state.get())
+        if len(self.peers.units()) > 0 and not bool(self.peers.state.get()):
+            return False
+        return bool(self.database.state.get())
 
     def on_prepare_action(self, event: EventBase) -> None:
         """Process the prepare action."""

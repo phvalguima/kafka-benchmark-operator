@@ -32,9 +32,8 @@ from benchmark.core.models import (
 from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
-from benchmark.managers.config import ConfigManager
 from benchmark.literals import PEER_RELATION
-
+from benchmark.managers.config import ConfigManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 
 # Log messages can be retrieved using juju debug-log
@@ -44,10 +43,13 @@ logger = logging.getLogger(__name__)
 class KafkaDatabaseState(DatabaseState):
     """State collection for the database relation."""
 
-    def __init__(self, component: Application | Unit, relation: Relation | None):
+    def __init__(
+        self, component: Application | Unit, relation: Relation | None, data: dict[str, Any] = {}
+    ):
         super().__init__(
             component=component,
             relation=relation,
+            data=data,
         )
         self.database_key = "topic"
 
@@ -66,24 +68,11 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         charm: CharmBase,
         relation_name: str,
     ):
-        self.consumer_prefix = f"{charm.model.name}-{charm.app.name}-benchmark-consumer"
         super().__init__(charm, relation_name)
-        # self.charm.framework.observe(
-        #     self.kafka_cluster.on.bootstrap_server_changed, self._on_kafka_bootstrap_server_changed
-        # )
-        # self.charm.framework.observe(self.kafka_cluster.on.topic_created, self._on_kafka_topic_created)
-        # self.charm.framework.observe(self.on[KAFKA_CLUSTER].relation_broken, self._on_relation_broken)
-
-    @property
-    @override
-    def state(self) -> RelationState:
-        return KafkaDatabaseState(self.charm.app, self.relation)
-
-    @property
-    @override
-    def client(self) -> Any:
-        """Returns the data_interfaces client corresponding to the database."""
-        return KafkaRequires(
+        self.consumer_prefix = f"{charm.model.name}-{charm.app.name}-benchmark-consumer"
+        # We can have only one reference to a Requires object.
+        # Hence, we will store it here:
+        self._internal_client = KafkaRequires(
             self.charm,
             self.relation_name,
             TOPIC_NAME,
@@ -91,17 +80,33 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
             consumer_group_prefix=self.consumer_prefix,
         )
 
+    @property
+    @override
+    def state(self) -> RelationState:
+        """Returns the state of the database."""
+        return KafkaDatabaseState(
+            self.charm.app,
+            self.relation,
+            data=self.client.fetch_relation_data()[self.relation.id],
+        )
+
+    @property
+    @override
+    def client(self) -> Any:
+        """Returns the data_interfaces client corresponding to the database."""
+        return self._internal_client
+
     def bootstrap_servers(self) -> str | None:
         """Return the bootstrap servers."""
         return self.client.endpoints
 
     def tls(self) -> tuple[str, str] | None:
         """Return the tls."""
-        if not self.client.tls:
+        if not self.state.tls:
             return None, None
-        if not self.client.tls_ca:
-            return self.client.tls, None
-        return self.client.tls, self.client.tls_ca
+        if not self.state.tls_ca:
+            return self.state.tls, None
+        return self.state.tls, self.state.tls_ca
 
 
 class KafkaPeersRelationHandler(PeerRelationHandler):
@@ -151,6 +156,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     def __init__(self, *args):
         super().__init__(*args, db_relation_name=CLIENT_RELATION_NAME)
         self.labels = ",".join([self.model.name, self.unit.name.replace("/", "-")])
+
         self.database = KafkaDatabaseRelationHandler(
             self,
             CLIENT_RELATION_NAME,

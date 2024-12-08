@@ -3,7 +3,6 @@
 
 """This module contains the constants and models used by the sysbench charm."""
 
-
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 

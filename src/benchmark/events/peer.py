@@ -49,7 +49,7 @@ class PeerRelationHandler(Object):
 
     def this_unit(self) -> Unit:
         """Return the current unit."""
-        return self.relation.unit
+        return self.charm.unit
 
     def unit_state(self, unit: Unit) -> PeerState:
         """Return the unit data."""

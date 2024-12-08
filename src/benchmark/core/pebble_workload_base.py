@@ -16,9 +16,6 @@ from charms.operator_libs_linux.v1.systemd import (
 from overrides import override
 
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
-from benchmark.literals import (
-    DPBenchmarkLifecycleState,
-)
 
 
 class DPBenchmarkPebbleTemplatePaths(WorkloadTemplatePaths):

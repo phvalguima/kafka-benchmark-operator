@@ -6,8 +6,8 @@
 import logging
 from abc import abstractmethod
 
-from ops.charm import CharmBase, CharmEvents
-from ops.framework import EventBase, EventSource, Object
+from ops.charm import CharmBase
+from ops.framework import Object
 
 from benchmark.core.models import RelationState
 
@@ -20,6 +20,7 @@ class RelationHandler(Object):
     This class will provide the charm with the necessary data to connect to the DB as
     well as the current relation status.
     """
+
     def __init__(
         self,
         charm: CharmBase,
