@@ -12,6 +12,7 @@ import logging
 from typing import Any, Optional
 
 from ops.model import Application, Relation, Unit
+from overrides import override
 from pydantic import BaseModel, error_wrappers, root_validator
 
 from benchmark.literals import (
@@ -118,11 +119,15 @@ class RelationState:
     @property
     def relation_data(self) -> dict[str, str]:
         """Returns the relation data."""
-        return self.relation.data[self.component]
+        if self.relation:
+            return self.relation.data[self.component]
+        return {}
 
     @property
     def remote_data(self) -> dict[str, str]:
         """Returns the remote relation data."""
+        if not self.relation:
+            return {}
         if self.scope == Scope.APP:
             return self.relation.data[self.relation.app]
         return self.relation.data[self.relation.unit]
@@ -134,12 +139,15 @@ class RelationState:
         except AttributeError:
             return False
 
-    def get(self) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:
         """Returns the value of the key."""
         ...
 
     def set(self, items: dict[str, str]) -> None:
         """Writes to relation_data."""
+        if not self.relation:
+            return
+
         delete_fields = [key for key in items if not items[key]]
         update_content = {k: items[k] for k in items if k not in delete_fields}
 
@@ -152,11 +160,12 @@ class RelationState:
 class PeerState(RelationState):
     """State collection for the database relation."""
 
-    def get(self) -> Any:
+    @override
+    def get(self, key: str, default: Any = None) -> Any:
         """Returns the value of the key."""
         return self.relation_data.get(
-            LIFECYCLE_KEY,
-            None,
+            key,
+            default,
         )
 
     @property

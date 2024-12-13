@@ -3,13 +3,13 @@
 
 """The core models for the wrapper script."""
 
-from enum import StrEnum
+from enum import Enum
 
 from prometheus_client import Gauge
 from pydantic import BaseModel
 
 
-class BenchmarkCommand(StrEnum):
+class BenchmarkCommand(Enum):
     """Enum to hold the benchmark phase."""
 
     PREPARE = "prepare"
@@ -20,7 +20,7 @@ class BenchmarkCommand(StrEnum):
     CLEANUP = "cleanup"
 
 
-class ProcessStatus(StrEnum):
+class ProcessStatus(Enum):
     """Enum to hold the process status."""
 
     RUNNING = "running"

@@ -157,8 +157,8 @@ class ConfigManager:
         """Render the workload parameters."""
         return self._render(
             values=self.get_workload_params(),
-            template_file=self.workload.paths.service_template,
-            template_content=None,
+            template_file=None,
+            template_content=self.workload.workload_params_template,
             dst_filepath=dst_path,
         )
 
@@ -183,7 +183,11 @@ class ConfigManager:
         self,
         transition: DPBenchmarkLifecycleTransition,
     ) -> bool:
-        if not (values := self.get_execution_options()):
+        if not (
+            os.path.exists(self.workload.paths.service)
+            and os.path.exists(self.workload.paths.workload_params)
+            and (values := self.get_execution_options())
+        ):
             return False
         values = values.dict() | {
             "charm_root": os.environ.get("CHARM_DIR", ""),

@@ -64,14 +64,14 @@ class DPBenchmarkEvents(CharmEvents):
     check_upload = EventSource(DPBenchmarkCheckUploadEvent)
 
 
-def workload_build() -> WorkloadBase:
+def workload_build(workload_params_template: str) -> WorkloadBase:
     """Build the workload."""
     try:
         # Really simple check to see if we have systemd
         subprocess.check_output(["systemctl", "--help"])
     except subprocess.CalledProcessError:
-        return DPBenchmarkPebbleWorkloadBase()
-    return DPBenchmarkSystemdWorkloadBase()
+        return DPBenchmarkPebbleWorkloadBase(workload_params_template)
+    return DPBenchmarkSystemdWorkloadBase(workload_params_template)
 
 
 class DPBenchmarkCharmBase(ops.CharmBase, ABC):
@@ -80,6 +80,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     on = DPBenchmarkEvents()  # pyright: ignore [reportGeneralTypeIssues]
 
     RESOURCE_DEB_NAME = "benchmark-deb"
+    workload_params_template = ""
 
     def __init__(self, *args, db_relation_name: str):
         super().__init__(*args)
@@ -104,7 +105,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.peers = PeerRelationHandler(self, PEER_RELATION)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
-        self.workload = workload_build()
+        self.workload = workload_build(self.workload_params_template)
 
         self.lifecycle = LifecycleManager(self.peers, self.workload)
 
@@ -175,26 +176,31 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not status:
             self.unit.status = BlockedStatus("No database relation available")
             return
-        self._set_status()
+        self._set_benchmark_workload_status()
 
-    def _set_status(self) -> None:
+    def _set_benchmark_workload_status(self) -> None:
         """Recovers the benchmark status."""
         if self.config_manager.is_failed():
             self.unit.status = BlockedStatus("Benchmark failed, please check logs")
         elif self.config_manager.is_running():
             self.unit.status = ActiveStatus("Benchmark is running")
-        elif self.config_manager.is_prepared():  # and self.peer_state.is_prepared():
+        elif self.config_manager.is_prepared():
             self.unit.status = WaitingStatus("Benchmark is prepared: execute run to start")
         elif self.config_manager.is_stopped():
             self.unit.status = BlockedStatus("Benchmark is stopped after run")
+        # TODO: uncomment once collecting and uploading is implemented
+        # elif self.config_manager.is_collecting():
+        #     self.unit.status = MaintenanceStatus("Benchmark is collecting")
+        # elif self.config_manager.is_uploading():
+        #     self.unit.status = MaintenanceStatus("Benchmark is uploading")
         else:
-            self.unit.status = ActiveStatus()
+            self.unit.status = WaitingStatus("Benchmark is related but waiting for prepare")
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
         if not self.config_manager.is_prepared():
             # nothing to do: set the status and leave
-            self._set_status()
+            self._on_update_status(event)
             return
 
         if not self.config_manager.is_stopped() or not self.config_manager.stop():
@@ -203,7 +209,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.defer()
             return
         self.config_manager.run()
-        self._set_status()
+        self._on_update_status(event)
 
     def _on_relation_broken(self, _: EventBase) -> None:
         self.config_manager.stop()

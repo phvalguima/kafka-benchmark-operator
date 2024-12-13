@@ -60,17 +60,20 @@ class DPBenchmarkPebbleTemplatePaths(WorkloadTemplatePaths):
 class DPBenchmarkPebbleWorkloadBase(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, workload_params_template: str):
+        super().__init__(workload_params_template)
         self.paths = DPBenchmarkPebbleTemplatePaths()
+        os.chmod(self.paths.workload_params, 0o700)
 
+    @override
     def install(self) -> bool:
         """Installs the workload."""
-        pass
+        return True
 
+    @override
     def start(self) -> bool:
         """Starts the workload service."""
-        pass
+        return True
 
     @override
     def restart(self) -> bool:
@@ -83,6 +86,11 @@ class DPBenchmarkPebbleWorkloadBase(WorkloadBase):
         if self.is_running():
             return service_stop(self.paths.svc_name)
         return self.is_stopped()
+
+    @override
+    def reload(self) -> bool:
+        """Reloads the workload service."""
+        return True
 
     @override
     def read(self, path: str) -> list[str]:

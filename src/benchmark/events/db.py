@@ -13,9 +13,7 @@ import logging
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource
-from overrides import override
 
-from benchmark.core.models import DatabaseState, RelationState
 from benchmark.events.handler import RelationHandler
 from benchmark.literals import DPBenchmarkMissingOptionsError
 
@@ -97,15 +95,6 @@ class DatabaseRelationHandler(RelationHandler):
     #     if not (secret_id := self.client.fetch_relation_data()[self.relation.id].get("secret-tls")):
     #         return None
     #     return self.charm.framework.model.get_secret(id=secret_id).get_content()
-
-    @override
-    def state(self) -> RelationState:
-        """Returns the state of the database."""
-        return DatabaseState(
-            component=self.charm.app,
-            relation=self.relation,
-            data=self.client.fetch_relation_data()[self.relation.id],
-        )
 
     def _on_endpoints_changed(self, event: EventBase) -> None:
         """Handles the endpoints_changed event."""

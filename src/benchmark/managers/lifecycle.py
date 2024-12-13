@@ -173,7 +173,9 @@ class LifecycleManager:
         if neighbor == this:
             return 0
 
-        def _get_value(phase: DPBenchmarkLifecycleState) -> int:
+        def _get_value(phase: DPBenchmarkLifecycleState) -> int:  # noqa: C901
+            if phase is None:
+                return -1
             if phase == DPBenchmarkLifecycleState.UNSET:
                 return 0
             if phase == DPBenchmarkLifecycleState.PREPARING:

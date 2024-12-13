@@ -7,31 +7,18 @@ import os
 from abc import ABC, abstractmethod
 
 
-class WorkloadParamsTemplateBase(ABC):
-    """Returns the workload parameters template.
-
-    Ideally, this class should be static and its template content remains the same across
-    different types of implementation (VM and k8s).
-    """
-
-    def template(self) -> str:
-        """Returns the workload parameters template."""
-        ...
-
-
 class WorkloadTemplatePaths(ABC):
     """Interface for workload template paths."""
 
     @property
-    def benchmark_wrapper(self) -> str:
-        """The main benchmark_wrapper managed by the service."""
-        os.path.join(os.environ.get("CHARM_DIR", ""), "src/benchmark/wrapper/main.py")
-
-    @property
-    @abstractmethod
     def svc_name(self) -> str:
         """The service name."""
-        ...
+        return "dpe_benchmark"
+
+    @property
+    def bin(self) -> str:
+        """The path to the benchmark script."""
+        return os.path.join(os.environ.get("CHARM_DIR", ""), "src/benchmark/wrapper/main.py")
 
     @property
     @abstractmethod
@@ -72,7 +59,10 @@ class WorkloadBase(ABC):
     """Base interface for common workload operations."""
 
     paths: WorkloadTemplatePaths
-    workload_params_template: WorkloadParamsTemplateBase
+    workload_params_template: str
+
+    def __init__(self, workload_params_template: str):
+        self.workload_params_template = workload_params_template
 
     @abstractmethod
     def install(self) -> bool:
@@ -92,6 +82,11 @@ class WorkloadBase(ABC):
     @abstractmethod
     def halt(self) -> bool:
         """Halts the workload service."""
+        ...
+
+    @abstractmethod
+    def reload(self) -> bool:
+        """Reloads the script."""
         ...
 
     @abstractmethod

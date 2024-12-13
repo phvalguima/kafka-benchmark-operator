@@ -40,6 +40,36 @@ from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 logger = logging.getLogger(__name__)
 
 
+KAFKA_WORKLOAD_PARAMS_TEMPLATE = """name: Kafka-benchmark
+driverClass: io.openmessaging.benchmark.driver.kafka.KafkaBenchmarkDriver
+
+# Kafka client-specific configuration
+replicationFactor: {{ total_number_of_brokers }}
+
+topicConfig: |
+min.insync.replicas={{ total_number_of_brokers }}
+
+commonConfig: |
+security.protocol=SASL_PLAINTEXT
+bootstrap.servers={{ list_of_brokers_bootstrap }}
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username={{ username }} password={{ password }};
+
+producerConfig: |
+enable.idempotence=true
+max.in.flight.requests.per.connection=1
+retries=2147483647
+acks=all
+linger.ms=1
+batch.size=1048576
+
+consumerConfig: |
+auto.offset.reset=earliest
+enable.auto.commit=false
+max.partition.fetch.bytes=10485760
+"""
+
+
 class KafkaDatabaseState(DatabaseState):
     """State collection for the database relation."""
 
@@ -84,6 +114,16 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
     @override
     def state(self) -> RelationState:
         """Returns the state of the database."""
+        if not (
+            self.relation and self.client and self.relation.id in self.client.fetch_relation_data()
+        ):
+            logger.error("Relation data not found")
+            # We may have an error if the relation is gone but self.relation.id still exists
+            # or if the relation is not found in the fetch_relation_data yet
+            return KafkaDatabaseState(
+                self.charm.app,
+                None,
+            )
         return KafkaDatabaseState(
             self.charm.app,
             self.relation,
@@ -98,7 +138,7 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
 
     def bootstrap_servers(self) -> str | None:
         """Return the bootstrap servers."""
-        return self.client.endpoints
+        return self.state.get().hosts
 
     def tls(self) -> tuple[str, str] | None:
         """Return the tls."""
@@ -142,11 +182,13 @@ class KafkaConfigManager(ConfigManager):
     @override
     def get_workload_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
+        db = self.database.state.get()
+
         return {
             "total_number_of_brokers": len(self.peer.units()) + 1,
             "list_of_brokers_bootstrap": self.database.bootstrap_servers(),
-            "username": self.database.client.username,
-            "password": self.database.client.password,
+            "username": db.username,
+            "password": db.password,
         }
 
 
@@ -154,6 +196,8 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     """Charm the service."""
 
     def __init__(self, *args):
+        self.workload_params_template = KAFKA_WORKLOAD_PARAMS_TEMPLATE
+
         super().__init__(*args, db_relation_name=CLIENT_RELATION_NAME)
         self.labels = ",".join([self.model.name, self.unit.name.replace("/", "-")])
 

@@ -12,6 +12,7 @@ import subprocess
 
 from charms.operator_libs_linux.v1.systemd import (
     service_failed,
+    service_reload,
     service_restart,
     service_running,
     service_stop,
@@ -20,7 +21,6 @@ from overrides import override
 
 from benchmark.core.workload_base import (
     WorkloadBase,
-    WorkloadParamsTemplateBase,
     WorkloadTemplatePaths,
 )
 
@@ -33,12 +33,6 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
 
     @property
     @override
-    def svc_name(self) -> str:
-        """The service name."""
-        return "dpe_benchmark"
-
-    @property
-    @override
     def service(self) -> str | None:
         """The optional path to the service file managing the script."""
         return f"/etc/systemd/system/{self.svc_name}.service"
@@ -47,7 +41,7 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
     @override
     def service_template(self) -> str:
         """The service template file."""
-        return os.path.join(self.templates, "dpe_benchmark.service.j2")
+        return "dpe_benchmark.service.j2"
 
     @property
     @override
@@ -78,16 +72,17 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
 
     def __init__(
-        self, workload_params_template: WorkloadParamsTemplateBase = WorkloadParamsTemplateBase()
+        self,
+        workload_params_template: str,
     ):
-        super().__init__()
+        super().__init__(workload_params_template)
         self.paths = DPBenchmarkSystemdTemplatePaths()
-        self.workload_params_template = workload_params_template
+        os.chmod(self.paths.workload_params, 0o700)
 
     @override
     def install(self) -> bool:
         """Installs the workload."""
-        return
+        return True
 
     @override
     def start(self) -> bool:
@@ -105,6 +100,11 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
         if self.is_active():
             return service_stop(self.paths.svc_name)
         return self.is_halted()
+
+    @override
+    def reload(self) -> bool:
+        """Reloads the script."""
+        service_reload()
 
     @override
     def read(self, path: str) -> list[str]:
@@ -158,7 +158,7 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     @override
     def _is_stopped(self) -> bool:
         """Checks that the workload is stopped."""
-        return not service_running(self.paths.service)
+        return not service_running(self.paths.service) and not service_failed(self.paths.service)
 
     @override
     def is_failed(self) -> bool:
