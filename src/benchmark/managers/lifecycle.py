@@ -3,6 +3,13 @@
 
 """The lifecycle manager class."""
 
+from ops.model import (
+    StatusBase,
+    ActiveStatus,
+    BlockedStatus,
+    WaitingStatus,
+    MaintenanceStatus,
+)
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     DPBenchmarkLifecycleState,
@@ -25,12 +32,66 @@ class LifecycleManager:
             or DPBenchmarkLifecycleState.UNSET
         )
 
-    def update(self, state: DPBenchmarkLifecycleState):
+    def make_transition(self, new_state: DPBenchmarkLifecycleState) -> bool:
         """Update the lifecycle state."""
-        self.peers.unit_state(self.peers.this_unit()).lifecycle = state
+        if new_state == DPBenchmarkLifecycleState.UNSET:
+            # We stop any service right away
+            if not self.config_manager.is_stopped() or not self.config_manager.stop():
+                return False
+            # And clean up the workload
+            if not self.config_manager.is_cleaned() or not self.config_manager.clean():
+                return False
+
+        # The transition "PREPARING" is a special case:
+        # Only one unit executes it and the others way.
+        # Therefore, the PREPARING state must be processed at "PREPARE" call
+        # if new_state == DPBenchmarkLifecycleState.PREPARING:
+        #     # Prepare the workload
+        #     if not self.config_manager.prepare():
+        #         return False
+
+        if new_state == DPBenchmarkLifecycleState.AVAILABLE:
+            # workload should be prepared, check we are stopped or stop it
+            if not self.config_manager.is_stopped() and not self.config_manager.stop():
+                return False
+
+        if new_state == DPBenchmarkLifecycleState.RUNNING:
+            # Start the workload
+            if not self.config_manager.is_running() or not self.config_manager.run():
+                return False
+
+        # TODO: Implement the following states
+        # if new_state == DPBenchmarkLifecycleState.COLLECTING:
+        #     # Collect the workload data
+        #     if not self.config_manager.is_collecting() or not self.config_manager.collect():
+        #         return False
+        # if new_state == DPBenchmarkLifecycleState.UPLOADING:
+        #     # Collect the workload data
+        #     if not self.config_manager.is_uploading() or not self.config_manager.upload():
+        #         return False
+
+        if new_state == DPBenchmarkLifecycleState.FAILED:
+            # Stop the workload
+            if (
+                not self.config_manager.is_failed()
+                or not self.config_manager.is_stopped()
+                or not self.config_manager.stop()
+            ):
+                return False
+
+        if new_state in [
+            DPBenchmarkLifecycleState.FINISHED,
+            DPBenchmarkLifecycleState.STOPPED,
+        ]:
+            # Stop the workload
+            if not self.config_manager.is_stopped() or not self.config_manager.stop():
+                return False
+
+        self.peers.unit_state(self.peers.this_unit()).lifecycle = new_state.value
+        return True
 
     def next(  # noqa: C901
-        self, transition: DPBenchmarkLifecycleTransition | None
+        self, transition: DPBenchmarkLifecycleTransition | None = None
     ) -> DPBenchmarkLifecycleState | None:
         """Return the next lifecycle state."""
         # Changes that takes us to UNSET:
@@ -73,9 +134,7 @@ class LifecycleManager:
 
         # Changes that takes us to PREPARING:
         # We received a prepare signal and no one else is available yet or we failed previously
-        if transition == DPBenchmarkLifecycleTransition.PREPARE and (
-            self._peers_state() or DPBenchmarkLifecycleState.UNSET
-        ) in [
+        if transition == DPBenchmarkLifecycleTransition.PREPARE and self._peers_state() in [
             DPBenchmarkLifecycleState.UNSET,
             DPBenchmarkLifecycleState.FAILED,
         ]:
@@ -160,7 +219,46 @@ class LifecycleManager:
                 continue
             elif self._compare_lifecycle_states(neighbor, next_state) > 0:
                 next_state = neighbor
-        return next_state
+        return next_state or DPBenchmarkLifecycleState.UNSET
+
+    @property
+    def status(self) -> StatusBase:
+        """Return the status of the benchmark."""
+        if self.current() == DPBenchmarkLifecycleState.UNSET:
+            self.unit.status = WaitingStatus("Benchmark is unset")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.PREPARING:
+            self.unit.status = MaintenanceStatus("Preparing the benchmark")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.AVAILABLE:
+            self.unit.status = WaitingStatus("Benchmark prepared: call run to start")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.RUNNING:
+            self.unit.status = ActiveStatus("Benchmark is running")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.FAILED:
+            self.unit.status = BlockedStatus("Benchmark failed execution")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.COLLECTING:
+            self.unit.status = ActiveStatus("Benchmark is collecting data")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.UPLOADING:
+            self.unit.status = ActiveStatus("Benchmark is uploading data")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.FINISHED:
+            self.unit.status = ActiveStatus("Benchmark finished")
+            return
+
+        if self.current() == DPBenchmarkLifecycleState.STOPPED:
+            self.unit.status = WaitingStatus("Benchmark is stopped")
+            return
 
     def _compare_lifecycle_states(  # noqa: C901
         self, neighbor: DPBenchmarkLifecycleState, this: DPBenchmarkLifecycleState
@@ -174,8 +272,6 @@ class LifecycleManager:
             return 0
 
         def _get_value(phase: DPBenchmarkLifecycleState) -> int:  # noqa: C901
-            if phase is None:
-                return -1
             if phase == DPBenchmarkLifecycleState.UNSET:
                 return 0
             if phase == DPBenchmarkLifecycleState.PREPARING:

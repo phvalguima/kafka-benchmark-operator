@@ -171,7 +171,7 @@ class PeerState(RelationState):
     @property
     def lifecycle(self) -> DPBenchmarkLifecycleState | None:
         """Returns the value of the lifecycle key."""
-        return self.get(LIFECYCLE_KEY)
+        return DPBenchmarkLifecycleState(self.get(LIFECYCLE_KEY))
 
     @lifecycle.setter
     def lifecycle(self, status: DPBenchmarkLifecycleState):

@@ -8,6 +8,7 @@ and returns a model containing that information.
 """
 
 import os
+import logging
 from typing import Any, Optional
 
 from jinja2 import DictLoader, Environment, FileSystemLoader, exceptions
@@ -19,6 +20,9 @@ from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import DPBenchmarkLifecycleTransition
+
+# Log messages can be retrieved using juju debug-log
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -84,11 +88,16 @@ class ConfigManager:
         self,
     ) -> bool:
         """Prepare the benchmark service."""
-        self._render_params(self.workload.paths.workload_params)
-        self._render_service(
-            DPBenchmarkLifecycleTransition.PREPARE,
-            self.workload.paths.service,
-        )
+        try:
+            self._render_params(self.workload.paths.workload_params)
+            self._render_service(
+                DPBenchmarkLifecycleTransition.PREPARE,
+                self.workload.paths.service,
+            )
+        except Exception as e:
+            logger.error(f"Failed to prepare the benchmark service: {e}")
+            return False
+        return True
 
     def is_prepared(
         self,
@@ -99,12 +108,17 @@ class ConfigManager:
     def run(
         self,
     ) -> bool:
-        """Prepare the benchmark service."""
-        self._render_params(self.workload.paths.workload_params)
-        self._render_service(
-            DPBenchmarkLifecycleTransition.RUN,
-            self.workload.paths.service,
-        )
+        """Run the benchmark service."""
+        try:
+            self._render_params(self.workload.paths.workload_params)
+            self._render_service(
+                DPBenchmarkLifecycleTransition.RUN,
+                self.workload.paths.service,
+            )
+        except Exception as e:
+            logger.error(f"Failed to prepare the benchmark service: {e}")
+            return False
+        return True
 
     def is_running(
         self,
@@ -115,12 +129,17 @@ class ConfigManager:
     def stop(
         self,
     ) -> bool:
-        """Prepare the benchmark service."""
-        self._render_params(self.workload.paths.workload_params)
-        self._render_service(
-            DPBenchmarkLifecycleTransition.STOP,
-            self.workload.paths.service,
-        )
+        """Stop the benchmark service."""
+        try:
+            self._render_params(self.workload.paths.workload_params)
+            self._render_service(
+                DPBenchmarkLifecycleTransition.STOP,
+                self.workload.paths.service,
+            )
+        except Exception as e:
+            logger.error(f"Failed to prepare the benchmark service: {e}")
+            return False
+        return True
 
     def is_stopped(
         self,
@@ -131,12 +150,17 @@ class ConfigManager:
     def clean(
         self,
     ) -> bool:
-        """Prepare the benchmark service."""
-        self._render_params(self.workload.paths.workload_params)
-        self._render_service(
-            DPBenchmarkLifecycleTransition.CLEAN,
-            self.workload.paths.service,
-        )
+        """Clean the benchmark service."""
+        try:
+            self._render_params(self.workload.paths.workload_params)
+            self._render_service(
+                DPBenchmarkLifecycleTransition.CLEAN,
+                self.workload.paths.service,
+            )
+        except Exception as e:
+            logger.error(f"Failed to prepare the benchmark service: {e}")
+            return False
+        return True
 
     def is_cleaned(
         self,
@@ -193,17 +217,20 @@ class ConfigManager:
             "charm_root": os.environ.get("CHARM_DIR", ""),
             "command": transition.value,
         }
-        return self.workload.read(self.workload.paths.service) == self._render(
+        compare_svc = "\n".join(self.workload.read(self.workload.paths.service)) == self._render(
             values=values,
             template_file=self.workload.paths.service_template,
             template_content=None,
             dst_filepath=None,
-        ) and self.workload.read(self.workload.paths.workload_params) == self._render(
+        )
+        compare_params = "\n".join(self.workload.read(self.workload.paths.workload_params)) == self._render(
             values=self.get_workload_params(),
             template_file=None,
             template_content=self.workload.workload_params_template,
             dst_filepath=None,
         )
+
+        return compare_svc and compare_params
 
     def _render(
         self,

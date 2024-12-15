@@ -23,11 +23,7 @@ import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
 from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    WaitingStatus,
-)
+from ops.model import BlockedStatus
 
 from benchmark.core.models import DPBenchmarkLifecycleState, PeerState
 from benchmark.core.pebble_workload_base import DPBenchmarkPebbleWorkloadBase
@@ -107,8 +103,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         self.workload = workload_build(self.workload_params_template)
 
-        self.lifecycle = LifecycleManager(self.peers, self.workload)
-
         self._grafana_agent = COSAgentProvider(
             self,
             relation_name=COS_AGENT_RELATION,
@@ -127,6 +121,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             config=self.config,
             labels=self.labels,
         )
+        self.lifecycle = LifecycleManager(self.peers, self.config_manager)
 
     @abstractmethod
     def supported_workloads(self) -> list[str]:
@@ -176,25 +171,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not status:
             self.unit.status = BlockedStatus("No database relation available")
             return
-        self._set_benchmark_workload_status()
 
-    def _set_benchmark_workload_status(self) -> None:
-        """Recovers the benchmark status."""
-        if self.config_manager.is_failed():
-            self.unit.status = BlockedStatus("Benchmark failed, please check logs")
-        elif self.config_manager.is_running():
-            self.unit.status = ActiveStatus("Benchmark is running")
-        elif self.config_manager.is_prepared():
-            self.unit.status = WaitingStatus("Benchmark is prepared: execute run to start")
-        elif self.config_manager.is_stopped():
-            self.unit.status = BlockedStatus("Benchmark is stopped after run")
-        # TODO: uncomment once collecting and uploading is implemented
-        # elif self.config_manager.is_collecting():
-        #     self.unit.status = MaintenanceStatus("Benchmark is collecting")
-        # elif self.config_manager.is_uploading():
-        #     self.unit.status = MaintenanceStatus("Benchmark is uploading")
-        else:
-            self.unit.status = WaitingStatus("Benchmark is related but waiting for prepare")
+        # Now, let's check if we need to update our lifecycle position
+        if (next_state := self.lifecycle.next(None)) and self.lifecycle.current() != next_state:
+            self.lifecycle.update(next_state)
+        self.unit.status = self.lifecycle.status
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
@@ -210,10 +191,6 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return
         self.config_manager.run()
         self._on_update_status(event)
-
-    def _on_relation_broken(self, _: EventBase) -> None:
-        self.config_manager.stop()
-        self.config_manager.clean()
 
     def scrape_config(self) -> list[dict[str, Any]]:
         """Generate scrape config for the Patroni metrics endpoint."""
@@ -244,9 +221,24 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
-        if not self._process_transition(DPBenchmarkLifecycleTransition.PREPARE):
+        if not (state := self.lifecycle.next(DPBenchmarkLifecycleTransition.PREPARE)):
+            event.fail("Failed to prepare the benchmark: alredy done")
+            return
+
+        if state != DPBenchmarkLifecycleState.PREPARING:
+            event.fail(
+                "Another peer is already in prepare state. Wiat or call clean action to reset."
+            )
+            return
+
+        # We process the special case of PREPARE, as explained in lifecycle.make_transition()
+        if not self.config_manager.prepare():
             event.fail("Failed to prepare the benchmark")
-        event.set_results({"message": "Benchmark is prepared"})
+            return
+
+        self.lifecycle.make_transition(state)
+        self.unit.status = self.lifecycle.status
+        event.set_results({"message": "Benchmark is being prepared"})
 
     def on_run_action(self, event: EventBase) -> None:
         """Process the run action."""
@@ -254,9 +246,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
-        if not self._process_transition(DPBenchmarkLifecycleTransition.RUN):
+        if not self._process_action_transition(DPBenchmarkLifecycleTransition.RUN):
             event.fail("Failed to run the benchmark")
-        event.set_results({"message": "Benchmark is running"})
+        event.set_results({"message": "Benchmark has started"})
 
     def on_stop_action(self, event: EventBase) -> None:
         """Process the stop action."""
@@ -264,9 +256,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
-        if not self._process_transition(DPBenchmarkLifecycleTransition.STOP):
+        if not self._process_action_transition(DPBenchmarkLifecycleTransition.STOP):
             event.fail("Failed to stop the benchmark")
-        event.set_results({"message": "Benchmark is stopped"})
+        event.set_results({"message": "Benchmark has stopped"})
 
     def on_clean_action(self, event: EventBase) -> None:
         """Process the clean action."""
@@ -274,29 +266,18 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
-        if not self._process_transition(DPBenchmarkLifecycleTransition.CLEAN):
+        if not self._process_action_transition(DPBenchmarkLifecycleTransition.CLEAN):
             event.fail("Failed to clean the benchmark")
-        event.set_results({"message": "Benchmark is cleaned"})
+        event.set_results({"message": "Benchmark is cleaning"})
 
-    def _process_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:
+    def _process_action_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:
         """Process the action."""
         if not (state := self.lifecycle.next(transition)):
             return False
 
-        result = False
-        if state == DPBenchmarkLifecycleState.PREPARING and self.config_manager.prepare():
-            result = True
-        elif state == DPBenchmarkLifecycleState.RUNNING and self.config_manager.run():
-            result = True
-        elif state == DPBenchmarkLifecycleState.STOPPED and self.config_manager.stop():
-            result = True
-        elif state == DPBenchmarkLifecycleState.UNSET and self.config_manager.clean():
-            result = True
-
-        if result:
-            # Now, we update our state:
-            self.lifecycle.update(state)
-        return result
+        self.lifecycle.make_transition(state)
+        self.unit.status = self.lifecycle.status
+        return True
 
     ###########################################################################
     #

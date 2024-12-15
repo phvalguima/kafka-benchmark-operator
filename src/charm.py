@@ -35,6 +35,7 @@ from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import PEER_RELATION
 from benchmark.managers.config import ConfigManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
+from benchmark.managers.lifecycle import LifecycleManager
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -212,6 +213,9 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             peer=self.peer_handler,
             config=self.config,
         )
+        self.lifecycle = LifecycleManager(self.peers, self.config_manager)
+
+
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     def supported_workloads(self) -> list[str]:
