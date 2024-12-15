@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
-from charms.kafka.v0.client import KafkaClient
+from charms.kafka.v0.client import KafkaClient, NewTopic
 from ops.charm import CharmBase, EventBase
 from ops.model import Application, BlockedStatus, Relation, Unit
 from overrides import override
@@ -37,6 +37,7 @@ from benchmark.literals import PEER_RELATION
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
+from functools import cached_property
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -196,8 +197,15 @@ class KafkaConfigManager(ConfigManager):
     @override
     def prepare(self) -> bool:
         """Prepare the benchmark service."""
+        # First, clean if a topic already existed
+        self.clean()
         try:
-            self.client.create_topic(self.database.state.get().db_name)
+            topic = NewTopic(
+                name=self.database.state.get().db_name,
+                num_partitions=self.config.get("threads") * self.config.get("parallel_processes"),
+                replication_factor=self.client.replication_factor,
+            )
+            self.client.create_topic(topic)
         except Exception as e:
             logger.debug(f"Error creating topic: {e}")
 
@@ -217,11 +225,10 @@ class KafkaConfigManager(ConfigManager):
     def clean(self) -> bool:
         """Clean the benchmark service."""
         try:
-            self.client.delete_topic(self.database.state.get().db_name)
+            self.client.delete_topics([self.database.state.get().db_name])
         except Exception as e:
             logger.info(f"Error deleting topic: {e}")
-            return False
-        return True
+        return self.is_cleaned()
 
     @override
     def is_cleaned(self) -> bool:
@@ -232,7 +239,7 @@ class KafkaConfigManager(ConfigManager):
             logger.info(f"Error describing topic: {e}")
             return False
 
-    @property
+    @cached_property
     def client(self) -> KafkaClient:
         """Return the Kafka client."""
         state = self.database.state.get()
@@ -240,7 +247,7 @@ class KafkaConfigManager(ConfigManager):
             servers=self.database.bootstrap_servers(),
             username=state.username,
             password=state.password,
-            security_protocol="SSL" if (state.tls or state.tls_ca) else "PLAINTEXT",
+            security_protocol="SASL_SSL" if (state.tls or state.tls_ca) else "SASL_PLAINTEXT",
             cafile_path=state.tls_ca,
             certfile_path=state.tls,
             replication_factor=len(self.peer.units()) + 1,
