@@ -25,7 +25,7 @@ from ops.charm import CharmEvents
 from ops.framework import EventBase, EventSource
 from ops.model import BlockedStatus
 
-from benchmark.core.models import DPBenchmarkLifecycleState, PeerState
+from benchmark.core.models import DPBenchmarkLifecycleState
 from benchmark.core.pebble_workload_base import DPBenchmarkPebbleWorkloadBase
 from benchmark.core.systemd_workload_base import DPBenchmarkSystemdWorkloadBase
 from benchmark.core.workload_base import WorkloadBase
@@ -80,6 +80,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def __init__(self, *args, db_relation_name: str):
         super().__init__(*args)
+        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
@@ -134,6 +135,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     #
     ###########################################################################
 
+    def _on_install(self, event: EventBase) -> None:
+        """Install event."""
+        self.workload.install()
+        self.peers.state.lifecycle = DPBenchmarkLifecycleState.UNSET
+
     def _on_check_collect(self, event: EventBase) -> None:
         """Check if the upload is finished."""
         if self.config_manager.is_collecting():
@@ -142,11 +148,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return
 
         if self.unit.is_leader():
-            PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.UPLOADING)
+            self.peers.state.set(DPBenchmarkLifecycleState.UPLOADING)
             # Raise we are running an upload and we will check the status later
             self.on.check_upload.emit()
             return
-        PeerState(self.model.unit, PEER_RELATION).set(DPBenchmarkLifecycleState.FINISHED)
+        self.peers.state.set(DPBenchmarkLifecycleState.FINISHED)
 
     def _on_check_upload(self, event: EventBase) -> None:
         """Check if the upload is finished."""
@@ -154,9 +160,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             # Nothing to do, upload is still in progress
             event.defer()
             return
-        PeerState(self.model.unit, PEER_RELATION).lifecycle = DPBenchmarkLifecycleState.FINISHED
+        self.peers.state.lifecycle = DPBenchmarkLifecycleState.FINISHED
 
-    def _on_update_status(self, event: EventBase) -> None:
+    def _on_update_status(self, event: EventBase | None = None) -> None:
         """Set status for the operator and finishes the service.
 
         First, we check if there are relations with any meaningful data. If not, then
@@ -173,15 +179,14 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return
 
         # Now, let's check if we need to update our lifecycle position
-        if (next_state := self.lifecycle.next(None)) and self.lifecycle.current() != next_state:
-            self.lifecycle.update(next_state)
+        self._update_state()
         self.unit.status = self.lifecycle.status
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
         if not self.config_manager.is_prepared():
             # nothing to do: set the status and leave
-            self._on_update_status(event)
+            self._on_update_status()
             return
 
         if not self.config_manager.is_stopped() or not self.config_manager.stop():
@@ -190,7 +195,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.defer()
             return
         self.config_manager.run()
-        self._on_update_status(event)
+        self._on_update_status()
 
     def scrape_config(self) -> list[dict[str, Any]]:
         """Generate scrape config for the Patroni metrics endpoint."""
@@ -222,12 +227,12 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             return
 
         if not (state := self.lifecycle.next(DPBenchmarkLifecycleTransition.PREPARE)):
-            event.fail("Failed to prepare the benchmark: alredy done")
+            event.fail("Failed to prepare the benchmark: already done")
             return
 
         if state != DPBenchmarkLifecycleState.PREPARING:
             event.fail(
-                "Another peer is already in prepare state. Wiat or call clean action to reset."
+                "Another peer is already in prepare state. Wait or call clean action to reset."
             )
             return
 
@@ -272,6 +277,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _process_action_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:
         """Process the action."""
+        # First, check if we have an update in our lifecycle state
+        self._update_state()
+
         if not (state := self.lifecycle.next(transition)):
             return False
 
@@ -288,3 +296,8 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     def _unit_ip(self) -> str:
         """Current unit ip."""
         return self.model.get_binding(PEER_RELATION).network.bind_address
+
+    def _update_state(self) -> None:
+        """Update the state of the charm."""
+        if (next_state := self.lifecycle.next(None)) and self.lifecycle.current() != next_state:
+            self.lifecycle.make_transition(next_state)

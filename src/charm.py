@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
+from charms.kafka.v0.client import KafkaClient
 from ops.charm import CharmBase, EventBase
 from ops.model import Application, BlockedStatus, Relation, Unit
 from overrides import override
@@ -34,8 +35,8 @@ from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import PEER_RELATION
 from benchmark.managers.config import ConfigManager
-from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 from benchmark.managers.lifecycle import LifecycleManager
+from literals import CLIENT_RELATION_NAME, TOPIC_NAME
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -192,6 +193,59 @@ class KafkaConfigManager(ConfigManager):
             "password": db.password,
         }
 
+    @override
+    def prepare(self) -> bool:
+        """Prepare the benchmark service."""
+        try:
+            self.client.create_topic(self.database.state.get().db_name)
+        except Exception as e:
+            logger.debug(f"Error creating topic: {e}")
+
+        # We may fail to create the topic, as the relation has been recently stablished
+        return self.is_prepared()
+
+    @override
+    def is_prepared(self) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        try:
+            return self.database.state.get().db_name in self.client._admin_client.list_topics()
+        except Exception as e:
+            logger.info(f"Error describing topic: {e}")
+            return False
+
+    @override
+    def clean(self) -> bool:
+        """Clean the benchmark service."""
+        try:
+            self.client.delete_topic(self.database.state.get().db_name)
+        except Exception as e:
+            logger.info(f"Error deleting topic: {e}")
+            return False
+        return True
+
+    @override
+    def is_cleaned(self) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        try:
+            return self.database.state.get().db_name not in self.client._admin_client.list_topics()
+        except Exception as e:
+            logger.info(f"Error describing topic: {e}")
+            return False
+
+    @property
+    def client(self) -> KafkaClient:
+        """Return the Kafka client."""
+        state = self.database.state.get()
+        return KafkaClient(
+            servers=self.database.bootstrap_servers(),
+            username=state.username,
+            password=state.password,
+            security_protocol="SSL" if (state.tls or state.tls_ca) else "PLAINTEXT",
+            cafile_path=state.tls_ca,
+            certfile_path=state.tls,
+            replication_factor=len(self.peer.units()) + 1,
+        )
+
 
 class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     """Charm the service."""
@@ -214,7 +268,6 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             config=self.config,
         )
         self.lifecycle = LifecycleManager(self.peers, self.config_manager)
-
 
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 

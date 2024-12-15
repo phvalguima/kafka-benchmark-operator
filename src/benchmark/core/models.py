@@ -100,7 +100,14 @@ class DPBenchmarkWrapperOptionsModel(BaseModel):
 
     test_name: str
     parallel_processes: int
-    labels: Optional[str] = ""
+    threads: int
+    duration: int
+    run_count: int
+    workload_name: str
+    db_info: DPBenchmarkBaseDatabaseModel
+    report_interval: int
+    workload_profile: str
+    labels: str
 
 
 class RelationState:
@@ -171,12 +178,17 @@ class PeerState(RelationState):
     @property
     def lifecycle(self) -> DPBenchmarkLifecycleState | None:
         """Returns the value of the lifecycle key."""
-        return DPBenchmarkLifecycleState(self.get(LIFECYCLE_KEY))
+        return DPBenchmarkLifecycleState(
+            self.get(LIFECYCLE_KEY) or DPBenchmarkLifecycleState.UNSET
+        )
 
     @lifecycle.setter
-    def lifecycle(self, status: DPBenchmarkLifecycleState):
+    def lifecycle(self, status: DPBenchmarkLifecycleState | str) -> None:
         """Sets the lifecycle key value."""
-        self.set({LIFECYCLE_KEY: status})
+        if isinstance(status, DPBenchmarkLifecycleState):
+            self.set({LIFECYCLE_KEY: status.value})
+        else:
+            self.set({LIFECYCLE_KEY: status})
 
     @property
     def stop(self) -> bool:

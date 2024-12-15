@@ -64,10 +64,10 @@ class WorkloadBase(ABC):
     def __init__(self, workload_params_template: str):
         self.workload_params_template = workload_params_template
 
-    @abstractmethod
     def install(self) -> bool:
         """Installs the workload."""
-        ...
+        os.chmod(self.paths.bin, 0o700)
+        return True
 
     @abstractmethod
     def start(self) -> bool:

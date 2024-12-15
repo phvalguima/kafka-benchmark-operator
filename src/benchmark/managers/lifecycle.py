@@ -4,12 +4,13 @@
 """The lifecycle manager class."""
 
 from ops.model import (
-    StatusBase,
     ActiveStatus,
     BlockedStatus,
-    WaitingStatus,
     MaintenanceStatus,
+    StatusBase,
+    WaitingStatus,
 )
+
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     DPBenchmarkLifecycleState,
@@ -32,8 +33,14 @@ class LifecycleManager:
             or DPBenchmarkLifecycleState.UNSET
         )
 
-    def make_transition(self, new_state: DPBenchmarkLifecycleState) -> bool:
-        """Update the lifecycle state."""
+    def make_transition(self, new_state: DPBenchmarkLifecycleState) -> bool:  # noqa: C901
+        """Update the lifecycle state.
+
+        The main task is to do the update status. The first batch of if statements are
+        checks if we cannot do so. In any of these ifs, we return False.
+
+        Once these steps are done, we update the status and return True.
+        """
         if new_state == DPBenchmarkLifecycleState.UNSET:
             # We stop any service right away
             if not self.config_manager.is_stopped() or not self.config_manager.stop():
@@ -180,6 +187,7 @@ class LifecycleManager:
             self._peers_state(),
             DPBenchmarkLifecycleState.RUNNING,
         ) == 0 and self.current() in [
+            DPBenchmarkLifecycleState.UNSET,
             DPBenchmarkLifecycleState.AVAILABLE,
         ]:
             return DPBenchmarkLifecycleState.RUNNING
@@ -225,40 +233,31 @@ class LifecycleManager:
     def status(self) -> StatusBase:
         """Return the status of the benchmark."""
         if self.current() == DPBenchmarkLifecycleState.UNSET:
-            self.unit.status = WaitingStatus("Benchmark is unset")
-            return
+            return WaitingStatus("Benchmark is unset")
 
         if self.current() == DPBenchmarkLifecycleState.PREPARING:
-            self.unit.status = MaintenanceStatus("Preparing the benchmark")
-            return
+            return MaintenanceStatus("Preparing the benchmark")
 
         if self.current() == DPBenchmarkLifecycleState.AVAILABLE:
-            self.unit.status = WaitingStatus("Benchmark prepared: call run to start")
-            return
+            return WaitingStatus("Benchmark prepared: call run to start")
 
         if self.current() == DPBenchmarkLifecycleState.RUNNING:
-            self.unit.status = ActiveStatus("Benchmark is running")
-            return
+            return ActiveStatus("Benchmark is running")
 
         if self.current() == DPBenchmarkLifecycleState.FAILED:
-            self.unit.status = BlockedStatus("Benchmark failed execution")
-            return
+            return BlockedStatus("Benchmark failed execution")
 
         if self.current() == DPBenchmarkLifecycleState.COLLECTING:
-            self.unit.status = ActiveStatus("Benchmark is collecting data")
-            return
+            return ActiveStatus("Benchmark is collecting data")
 
         if self.current() == DPBenchmarkLifecycleState.UPLOADING:
-            self.unit.status = ActiveStatus("Benchmark is uploading data")
-            return
+            return ActiveStatus("Benchmark is uploading data")
 
         if self.current() == DPBenchmarkLifecycleState.FINISHED:
-            self.unit.status = ActiveStatus("Benchmark finished")
-            return
+            return ActiveStatus("Benchmark finished")
 
-        if self.current() == DPBenchmarkLifecycleState.STOPPED:
-            self.unit.status = WaitingStatus("Benchmark is stopped")
-            return
+        # if self.current() == DPBenchmarkLifecycleState.STOPPED:
+        return WaitingStatus("Benchmark is stopped")
 
     def _compare_lifecycle_states(  # noqa: C901
         self, neighbor: DPBenchmarkLifecycleState, this: DPBenchmarkLifecycleState

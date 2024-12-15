@@ -7,8 +7,10 @@ This class summarizes all the configuration needed for the workload execution
 and returns a model containing that information.
 """
 
-import os
 import logging
+import os
+import time
+from abc import abstractmethod
 from typing import Any, Optional
 
 from jinja2 import DictLoader, Environment, FileSystemLoader, exceptions
@@ -42,9 +44,30 @@ class ConfigManager:
         self.database = database
         self.labels = labels
 
+    @abstractmethod
     def get_workload_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
-        return {}
+        ...
+
+    @abstractmethod
+    def clean(self) -> bool:
+        """Clean the benchmark service."""
+        ...
+
+    @abstractmethod
+    def is_cleaned(self) -> bool:
+        """Checks if the benchmark service has passed its "prepare" status."""
+        ...
+
+    @property
+    def _test_name(self) -> str:
+        """Return the test name."""
+        return self.config.get("test_name") or "dpe-benchmark"
+
+    @property
+    def test_name(self) -> str:
+        """Return the test name."""
+        return self._test_name + "-" + str(int(time.time()))
 
     def get_execution_options(
         self,
@@ -59,7 +82,7 @@ class ConfigManager:
             # This check also serves to ensure we have only one valid relation at the time
             return None
         return DPBenchmarkWrapperOptionsModel(
-            test_name=self.config.get("test_name"),
+            test_name=self.test_name,
             parallel_processes=self.config.get("parallel_processes"),
             threads=self.config.get("threads"),
             duration=self.config.get("duration"),
@@ -68,7 +91,6 @@ class ConfigManager:
             workload_name=self.config.get("workload_name"),
             report_interval=self.config.get("report_interval"),
             workload_profile=self.config.get("workload_profile"),
-            workload_params=self.workload.paths.workload_params,
             labels=self.labels,
         )
 
@@ -76,13 +98,13 @@ class ConfigManager:
         """Check if the workload is collecting data."""
         # TODO: we define a way to check collection is finished.
         # For now, this feature is not available.
-        return True
+        return False
 
     def is_uploading(self) -> bool:
         """Check if the workload is uploading data."""
         # TODO: we define a way to check collection is finished.
         # For now, this feature is not available.
-        return True
+        return False
 
     def prepare(
         self,
@@ -131,42 +153,16 @@ class ConfigManager:
     ) -> bool:
         """Stop the benchmark service."""
         try:
-            self._render_params(self.workload.paths.workload_params)
-            self._render_service(
-                DPBenchmarkLifecycleTransition.STOP,
-                self.workload.paths.service,
-            )
+            return self.workload.halt()
         except Exception as e:
             logger.error(f"Failed to prepare the benchmark service: {e}")
             return False
-        return True
 
     def is_stopped(
         self,
     ) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
-        return self._check(DPBenchmarkLifecycleTransition.STOP) and self.workload.is_halted()
-
-    def clean(
-        self,
-    ) -> bool:
-        """Clean the benchmark service."""
-        try:
-            self._render_params(self.workload.paths.workload_params)
-            self._render_service(
-                DPBenchmarkLifecycleTransition.CLEAN,
-                self.workload.paths.service,
-            )
-        except Exception as e:
-            logger.error(f"Failed to prepare the benchmark service: {e}")
-            return False
-        return True
-
-    def is_cleaned(
-        self,
-    ) -> bool:
-        """Checks if the benchmark service has passed its "prepare" status."""
-        return self._check(DPBenchmarkLifecycleTransition.CLEAN) and self.workload.is_halted()
+        return self.workload.is_halted()
 
     def is_failed(
         self,
@@ -223,7 +219,9 @@ class ConfigManager:
             template_content=None,
             dst_filepath=None,
         )
-        compare_params = "\n".join(self.workload.read(self.workload.paths.workload_params)) == self._render(
+        compare_params = "\n".join(
+            self.workload.read(self.workload.paths.workload_params)
+        ) == self._render(
             values=self.get_workload_params(),
             template_file=None,
             template_content=self.workload.workload_params_template,

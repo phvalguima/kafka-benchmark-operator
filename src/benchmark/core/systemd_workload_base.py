@@ -77,12 +77,6 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     ):
         super().__init__(workload_params_template)
         self.paths = DPBenchmarkSystemdTemplatePaths()
-        os.chmod(self.paths.workload_params, 0o700)
-
-    @override
-    def install(self) -> bool:
-        """Installs the workload."""
-        return True
 
     @override
     def start(self) -> bool:
