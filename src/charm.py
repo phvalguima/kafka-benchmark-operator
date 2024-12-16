@@ -14,15 +14,16 @@ The next step is to execute the run action. This action renders the systemd serv
 starts the service. If the target is missing, then service errors and returns an error to
 the user.
 """
-
 import logging
+import os
+from functools import cached_property
 from typing import Any, Optional
 
 import ops
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
 from charms.kafka.v0.client import KafkaClient, NewTopic
-from ops.charm import CharmBase, EventBase
-from ops.model import Application, BlockedStatus, Relation, Unit
+from ops.charm import CharmBase
+from ops.model import Application, Relation, Unit
 from overrides import override
 
 from benchmark.base_charm import DPBenchmarkCharmBase
@@ -37,40 +38,55 @@ from benchmark.literals import PEER_RELATION
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
-from functools import cached_property
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
 
 
-KAFKA_WORKLOAD_PARAMS_TEMPLATE = """name: Kafka-benchmark
+KAFKA_WORKER_PARAMS_TEMPLATE = """name: Kafka-benchmark
 driverClass: io.openmessaging.benchmark.driver.kafka.KafkaBenchmarkDriver
 
 # Kafka client-specific configuration
 replicationFactor: {{ total_number_of_brokers }}
 
 topicConfig: |
-min.insync.replicas={{ total_number_of_brokers }}
+  min.insync.replicas={{ total_number_of_brokers }}
 
 commonConfig: |
-security.protocol=SASL_PLAINTEXT
-bootstrap.servers={{ list_of_brokers_bootstrap }}
-sasl.mechanism=SCRAM-SHA-512
-sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username={{ username }} password={{ password }};
+  security.protocol=SASL_PLAINTEXT
+  bootstrap.servers={{ list_of_brokers_bootstrap }}
+  sasl.mechanism=SCRAM-SHA-512
+  sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username={{ username }} password={{ password }};
 
 producerConfig: |
-enable.idempotence=true
-max.in.flight.requests.per.connection=1
-retries=2147483647
-acks=all
-linger.ms=1
-batch.size=1048576
+  max.in.flight.requests.per.connection={{ threads }}
+  retries=2147483647
+  acks=all
+  linger.ms=1
+  batch.size=1048576
 
 consumerConfig: |
-auto.offset.reset=earliest
-enable.auto.commit=false
-max.partition.fetch.bytes=10485760
+  auto.offset.reset=earliest
+  enable.auto.commit=false
+  max.partition.fetch.bytes=10485760
 """
+
+KAFKA_WORKLOAD_PARAMS_TEMPLATE = """name: {{ partitionsPerTopic }} producer / {{ partitionsPerTopic }} consumers on 1 topic
+
+topics: 1
+partitionsPerTopic: {{ partitionsPerTopic }}
+messageSize: 1024
+payloadFile: "{{ charm_root }}/openmessaging-benchmark/payload/payload-1Kb.data"
+subscriptionsPerTopic: {{ partitionsPerTopic }}
+consumerPerSubscription: 1
+producersPerTopic: {{ partitionsPerTopic }}
+producerRate: 50000
+consumerBacklogSizeGB: 0
+testDurationMinutes: {{ duration }}
+"""
+
+WORKER_PARAMS_YAML_FILE = "worker_params.yaml"
+TEN_YEARS_IN_MINUTES = 5_256_000
 
 
 class KafkaDatabaseState(DatabaseState):
@@ -144,9 +160,6 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         return self.state.get().hosts
 
     def tls(self) -> tuple[str, str] | None:
-        """Return the tls."""
-        if not self.state.tls:
-            return None, None
         if not self.state.tls_ca:
             return self.state.tls, None
         return self.state.tls, self.state.tls_ca
@@ -177,13 +190,14 @@ class KafkaConfigManager(ConfigManager):
         labels: Optional[str] = "",
     ):
         self.workload = workload
+        self.workload.worker_params_template = KAFKA_WORKER_PARAMS_TEMPLATE
+
         self.config = config
         self.peer = peer
         self.database = database
         self.labels = labels
 
-    @override
-    def get_workload_params(self) -> dict[str, Any]:
+    def get_worker_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
         db = self.database.state.get()
 
@@ -192,7 +206,50 @@ class KafkaConfigManager(ConfigManager):
             "list_of_brokers_bootstrap": self.database.bootstrap_servers(),
             "username": db.username,
             "password": db.password,
+            "threads": self.config.get("threads", 1) if self.config.get("threads") > 0 else 1,
         }
+
+    @override
+    def get_workload_params(self) -> dict[str, Any]:
+        """Return the worker parameters."""
+        return {
+            "partitionsPerTopic": self.config.get("threads"),
+            "duration": int(self.config.get("duration") / 60) if self.config.get("duration") > 0 else TEN_YEARS_IN_MINUTES,
+            "charm_root": os.environ.get("CHARM_DIR", ""),
+        }
+
+    def _render_worker_params(
+            self,
+            dst_path: str | None = None,
+        ) -> str|None:
+        """Render the worker parameters."""
+        return self._render(
+            values=self.get_worker_params(),
+            template_file=None,
+            template_content=self.workload.worker_params_template,
+            dst_filepath=dst_path,
+        )
+
+    @override
+    def _render_params(
+        self,
+        dst_path: str | None = None,
+    ) -> str | None:
+        """Render the workload parameters.
+
+        Overloaded as we need more than one file to be rendered.
+
+        This extra file will rendered in the same folder as `dst_path`, but with a different name.
+        """
+        import pdb; pdb.set_trace()
+
+        super()._render_params(dst_path)
+        self._render_worker_params(
+            os.path.join(
+                os.path.dirname(os.path.abspath(dst_path)),
+                WORKER_PARAMS_YAML_FILE,
+            )
+        )
 
     @override
     def prepare(self) -> bool:

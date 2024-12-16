@@ -78,7 +78,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     RESOURCE_DEB_NAME = "benchmark-deb"
     workload_params_template = ""
 
-    def __init__(self, *args, db_relation_name: str):
+    def __init__(self, *args, db_relation_name: str, workload: WorkloadBase|None = None):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -104,10 +104,13 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         # Trigger an update status as we want to know if the relation is ready
         self.framework.observe(
-            self.charm.on[db_relation_name].relation_changed, self._on_update_status
+            self.on[db_relation_name].relation_changed, self._on_update_status
         )
 
-        self.workload = workload_build(self.workload_params_template)
+        if workload:
+            self.workload = workload
+        else:
+            self.workload = workload_build(self.workload_params_template)
 
         self._grafana_agent = COSAgentProvider(
             self,

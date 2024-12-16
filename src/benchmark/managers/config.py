@@ -140,7 +140,7 @@ class ConfigManager:
             self.workload.reload()
             self.workload.restart()
         except Exception as e:
-            logger.error(f"Failed to prepare the benchmark service: {e}")
+            logger.error(f"Failed to run the benchmark service: {e}")
             return False
         return True
 
@@ -157,7 +157,7 @@ class ConfigManager:
         try:
             return self.workload.halt()
         except Exception as e:
-            logger.error(f"Failed to prepare the benchmark service: {e}")
+            logger.error(f"Failed to stop the benchmark service: {e}")
             return False
 
     def is_stopped(

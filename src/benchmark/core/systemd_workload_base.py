@@ -98,7 +98,7 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     @override
     def reload(self) -> bool:
         """Reloads the script."""
-        service_reload(self.svc_name)
+        service_reload(self.paths.svc_name)
 
     @override
     def read(self, path: str) -> list[str]:

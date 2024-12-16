@@ -9,7 +9,7 @@ from prometheus_client import Gauge
 from pydantic import BaseModel
 
 
-class BenchmarkCommand(Enum):
+class BenchmarkCommand(str, Enum):
     """Enum to hold the benchmark phase."""
 
     PREPARE = "prepare"
@@ -20,7 +20,7 @@ class BenchmarkCommand(Enum):
     CLEANUP = "cleanup"
 
 
-class ProcessStatus(Enum):
+class ProcessStatus(str, Enum):
     """Enum to hold the process status."""
 
     RUNNING = "running"
@@ -72,12 +72,13 @@ class BenchmarkMetrics:
         self.options = options
         self.metrics = {}
 
-    def add(self, value):
+    def add(self, sample: BaseModel):
         """Add the benchmark to the prometheus metric."""
-        if self.options.label not in self.metrics:
-            self.metrics[self.options.label] = Gauge(
-                self.options.label,
-                self.options.description,
-                ["model", "unit"],
-            )
-        self.metrics[self.options.label].labels(*self.options.extra_labels).set(value)
+        for key, value in sample.dict().items():
+            if self.options.label not in self.metrics:
+                self.metrics[f"{self.options.label}_{key}"] = Gauge(
+                    self.options.label,
+                    f"{self.options.description} {key}",
+                    ["model", "unit"],
+                )
+            self.metrics[f"{self.options.label}_{key}"].labels(*self.options.extra_labels).set(value)

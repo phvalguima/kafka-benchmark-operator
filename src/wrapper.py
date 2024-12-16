@@ -6,42 +6,93 @@
 
 import argparse
 
+from overrides import override
+from pydantic import BaseModel
+
 from benchmark.wrapper.core import (
+    BenchmarkCommand,
+    BenchmarkMetrics,
+    MetricOptionsModel,
     ProcessModel,
     WorkloadCLIArgsModel,
 )
 from benchmark.wrapper.main import MainWrapper
 from benchmark.wrapper.process import BenchmarkManager, BenchmarkProcess, WorkloadToProcessMapping
-from benchmark.wrapper.core import BenchmarkCommand
+
+
+class KafkaBenchmarkSample(BaseModel):
+
+    timestamp: float
+    produce_rate: float  # in msgs / s
+    produce_throughput: float  # in MB/s
+    produce_error_rate: int  # in err/s
+    produce_latency_avg: float  # in (ms)
+    produce_latency_50: float
+    produce_latency_99: float
+    produce_latency_99_9: float
+    produce_latency_max: float
+
+    consume_rate: float  # in msgs / s
+    consume_throughput: float  # in MB/s
+    consume_error_rate: int  # in err/s
+    consume_backlog: float  # in KB
 
 
 class KafkaMainWrapper(MainWrapper):
 
     def __init__(self, args: WorkloadCLIArgsModel):
         super().__init__(args)
-        self.mapping = KafkaWorkloadToProcessMapping(args)
+        metrics = BenchmarkMetrics(
+            options=MetricOptionsModel(
+                label="openmessaging",
+                extra_labels=args.extra_labels.split(","),
+                description="Kafka benchmark metric ",
+            )
+        )
+        self.mapping = KafkaWorkloadToProcessMapping(args, metrics)
+
+
+class KafkaBenchmarkProcess(BenchmarkProcess):
+    """This class models one of the processes being executed in the benchmark."""
+    @override
+    def process_line(self, line: str) -> str | None:
+        """Process the line and return the metric."""
+        # Kafka has nothing to process
+        return None
+
+
+class KafkaBenchmarkManager(BenchmarkManager):
+    """This class is in charge of managing all the processes in the benchmark run."""
+    @override
+    def process_line(self, line: str) -> str | None:
+        """Process the output of the process."""
+        ...
 
 
 class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     """This class maps the workload model to the process."""
 
-    def __init__(self, args: WorkloadCLIArgsModel):
-        self.args = args
-        self.manager = None
-
+    @override
     def _map_prepare(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the prepare phase."""
         # Kafka has nothing to do on prepare
         return None, None
 
+    @override
     def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
         driver_path = f"bin/{self.args.workload}-driver"
         workload_path = f"bin/{self.args.workload}-workload"
         processes = [
-            BenchmarkProcess(),
+            KafkaBenchmarkProcess(
+                model=ProcessModel(
+                    cmd=f"""sudo bin/benchmark --drivers {driver_path} {workload_path}""",
+                ),
+                args=self.args,
+                metrics=self.metrics,
+            ),
         ]
-        manager = BenchmarkManager(
+        manager = KafkaBenchmarkManager(
             model=ProcessModel(
                 cmd=f"""sudo bin/benchmark --drivers {driver_path} {workload_path}""",
             ),
@@ -51,6 +102,7 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
         )
         return manager, processes
 
+    @override
     def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the clean phase."""
         # Kafka has nothing to do on prepare
@@ -80,8 +132,10 @@ if __name__ == "__main__":
         help="comma-separated list of extra labels to be used.",
         default="",
     )
+
     # Parse the arguments as dictionary, using the same logic as:
     # https://github.com/python/cpython/blob/ \
     #     47c5a0f307cff3ed477528536e8de095c0752efa/Lib/argparse.py#L134
-    args = parser.parse_args().__dict__ | {"command": BenchmarkCommand(parser.parse_args().command)}
-    KafkaMainWrapper(WorkloadCLIArgsModel.parse_obj(args)).run()
+    args = parser.parse_args()
+    args.command = BenchmarkCommand(parser.parse_args().command.lower())
+    KafkaMainWrapper(WorkloadCLIArgsModel.parse_obj(args.__dict__)).run()

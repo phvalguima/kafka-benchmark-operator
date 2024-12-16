@@ -13,14 +13,14 @@ LIFECYCLE_KEY = "lifecycle"
 STOP_KEY = "stop"
 
 
-class Substrate(Enum):
+class Substrate(str, Enum):
     """Substrate of the benchmark."""
 
     VM = "vm"
     K8S = "k8s"
 
 
-class Scope(Enum):
+class Scope(str, Enum):
     """Scope of the benchmark."""
 
     UNIT = "unit"
@@ -40,7 +40,7 @@ class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
 
 
-class DPBenchmarkLifecycleState(Enum):
+class DPBenchmarkLifecycleState(str, Enum):
     """Benchmark lifecycle representation.
 
     The status are:
@@ -67,7 +67,7 @@ class DPBenchmarkLifecycleState(Enum):
     STOPPED = "stopped"
 
 
-class DPBenchmarkLifecycleTransition(Enum):
+class DPBenchmarkLifecycleTransition(str, Enum):
     """Benchmark lifecycle transition representation."""
 
     PREPARE = "prepare"
@@ -76,7 +76,7 @@ class DPBenchmarkLifecycleTransition(Enum):
     CLEAN = "clean"
 
 
-class DPBenchmarkWorkloadLifecycleState(Enum):
+class DPBenchmarkWorkloadLifecycleState(str, Enum):
     """Benchmark lifecycle state representation."""
 
     PREPARE = "prepare"
@@ -84,7 +84,7 @@ class DPBenchmarkWorkloadLifecycleState(Enum):
     STOP = "stop"
 
 
-class DPBenchmarkWorkloadState(Enum):
+class DPBenchmarkWorkloadState(str, Enum):
     """Represents the different states of the benchmark service."""
 
     RUNNING = "running"
@@ -92,7 +92,7 @@ class DPBenchmarkWorkloadState(Enum):
     FAILED = "failed"
 
 
-class DPBenchmarkRelationLifecycle(Enum):
+class DPBenchmarkRelationLifecycle(str, Enum):
     """Represents the different status of a mandatory relation."""
 
     NOT_AVAILABLE = "not_available"
