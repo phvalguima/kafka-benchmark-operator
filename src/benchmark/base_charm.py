@@ -102,6 +102,11 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.peers = PeerRelationHandler(self, PEER_RELATION)
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
+        # Trigger an update status as we want to know if the relation is ready
+        self.framework.observe(
+            self.charm.on[db_relation_name].relation_changed, self._on_update_status
+        )
+
         self.workload = workload_build(self.workload_params_template)
 
         self._grafana_agent = COSAgentProvider(
@@ -178,12 +183,22 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             self.unit.status = BlockedStatus("No database relation available")
             return
 
+        # We need to narrow the options of workload_name to the supported ones
+        if self.config.get("workload_name") not in self.supported_workloads():
+            self.unit.status = BlockedStatus(f"Unsupported workload: {self.config.get('workload_name')}")
+            return
+
         # Now, let's check if we need to update our lifecycle position
         self._update_state()
         self.unit.status = self.lifecycle.status
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
+        # We need to narrow the options of workload_name to the supported ones
+        if self.config.get("workload_name") not in self.supported_workloads():
+            self.unit.status = BlockedStatus(f"Unsupported workload: {self.config.get('workload_name')}")
+            return
+
         if not self.config_manager.is_prepared():
             # nothing to do: set the status and leave
             self._on_update_status()

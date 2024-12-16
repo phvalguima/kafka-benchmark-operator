@@ -273,6 +273,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             database=self.database,
             peer=self.peer_handler,
             config=self.config,
+            labels=self.labels,
         )
         self.lifecycle = LifecycleManager(self.peers, self.config_manager)
 
@@ -281,14 +282,6 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     def supported_workloads(self) -> list[str]:
         """List of supported workloads."""
         return ["default"]
-
-    def _on_config_changed(self, event: EventBase) -> None:
-        # We need to narrow the options of workload_name to the supported ones
-        if self.config.get("workload_name", "default") not in self.supported_workloads():
-            self.unit.status = BlockedStatus("Unsupported workload")
-            logger.error(f"Unsupported workload {self.config.get('workload_name', 'nyc_taxis')}")
-            return
-        return super()._on_config_changed(event)
 
 
 if __name__ == "__main__":

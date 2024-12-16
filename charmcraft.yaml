@@ -2,6 +2,11 @@
 # See LICENSE file for licensing details.
 
 type: charm
+
+# base: ubuntu@24.04
+# platforms:
+#   amd64:
+
 bases:
   - build-on:
       - name: "ubuntu"

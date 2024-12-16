@@ -11,21 +11,28 @@ from process import WorkloadToProcessMapping
 from prometheus_client import start_http_server
 
 
-def main(args: WorkloadCLIArgsModel):
-    """Prepares the workload and runs the benchmark."""
-    manager, _ = WorkloadToProcessMapping(args).map()
+class MainWrapper:
 
-    def _exit(*args, **kwargs):
-        manager.stop()
+    mapping: WorkloadToProcessMapping
 
-    signal.signal(signal.SIGINT, _exit)
-    signal.signal(signal.SIGTERM, _exit)
-    start_http_server(8088)
+    def __init__(self, args: WorkloadCLIArgsModel):
+        self.args = args
 
-    # Start the manager and process the output
-    manager.start()
-    # Now, start the event loop to monitor the processes:
-    manager.run()
+    def run(self):
+        """Prepares the workload and runs the benchmark."""
+        manager, _ = self.mapping.map(self.args.command)
+
+        def _exit(*args, **kwargs):
+            manager.stop()
+
+        signal.signal(signal.SIGINT, _exit)
+        signal.signal(signal.SIGTERM, _exit)
+        start_http_server(8088)
+
+        # Start the manager and process the output
+        manager.start()
+        # Now, start the event loop to monitor the processes:
+        manager.run()
 
 
 # EXAMPLE
@@ -33,22 +40,29 @@ def main(args: WorkloadCLIArgsModel):
 #
 # if __name__ == "__main__":
 #     parser = argparse.ArgumentParser(
-#         prog="osb_svc", description="Runs the benchmark command as an argument."
+#         prog="wrapper", description="Runs the benchmark command as an argument."
 #     )
+#     parser.add_argument("--test_name", type=str, help="Test name to be used")
 #     parser.add_argument("--command", type=str, help="Command to be executed", default="run")
-#     parser.add_argument("--workload", type=str, help="Name of the workload to be executed")
+#     parser.add_argument(
+#         "--workload", type=str, help="Name of the workload to be executed", default="default"
+#     )
 #     parser.add_argument("--report_interval", type=int, default=10)
+#     parser.add_argument("--parallel_processes", type=int, default=1)
 #     parser.add_argument("--threads", type=int, default=1)
 #     parser.add_argument("--duration", type=int, default=0)
 #     parser.add_argument("--run_count", type=int, default=1)
-#     parser.add_argument("--target_hosts", type=str, default="")
+#     parser.add_argument(
+#         "--target_hosts", type=str, default="", help="comma-separated list of target hosts"
+#     )
 #     parser.add_argument(
 #         "--extra_labels",
 #         type=str,
 #         help="comma-separated list of extra labels to be used.",
 #         default="",
 #     )
-
-#     args = parser.parse_args()
-
-#     main(WorkloadCLIArgsModel(args))
+#     # Parse the arguments as dictionary, using the same logic as:
+#     # https://github.com/python/cpython/blob/ \
+#     #     47c5a0f307cff3ed477528536e8de095c0752efa/Lib/argparse.py#L134
+#     args = parser.parse_args().__dict__ | {"command": BenchmarkCommand(parser.parse_args().command)}
+#     MainWrapper(WorkloadCLIArgsModel.parse_obj(args)).run()

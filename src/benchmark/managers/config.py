@@ -36,7 +36,7 @@ class ConfigManager:
         database: DatabaseRelationHandler,
         peer: PeerRelationHandler,
         config: dict[str, Any],
-        labels: Optional[str] = "",
+        labels: str,
     ):
         self.workload = workload
         self.config = config
@@ -137,6 +137,8 @@ class ConfigManager:
                 DPBenchmarkLifecycleTransition.RUN,
                 self.workload.paths.service,
             )
+            self.workload.reload()
+            self.workload.restart()
         except Exception as e:
             logger.error(f"Failed to prepare the benchmark service: {e}")
             return False
@@ -212,6 +214,7 @@ class ConfigManager:
         values = values.dict() | {
             "charm_root": os.environ.get("CHARM_DIR", ""),
             "command": transition.value,
+            "target_hosts": values.db_info.hosts,
         }
         compare_svc = "\n".join(self.workload.read(self.workload.paths.service)) == self._render(
             values=values,

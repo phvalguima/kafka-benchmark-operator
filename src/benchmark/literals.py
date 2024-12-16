@@ -36,36 +36,8 @@ class DPBenchmarkError(Exception):
     """Benchmark error."""
 
 
-class DPBenchmarkUnitNotReadyError(DPBenchmarkError):
-    """Unit not ready error."""
-
-
-class DPBenchmarkStatusError(DPBenchmarkError):
-    """Unit not ready error."""
-
-    def __init__(self, status: str):
-        self.status = status
-        super().__init__(f"Status: {status}")
-
-
-class DPBenchmarkExecError(DPBenchmarkError):
-    """Sysbench failed to execute a command."""
-
-
-class DPBenchmarkServiceError(DPBenchmarkExecError):
-    """Sysbench service error."""
-
-
-class DPBenchmarkExecFailedError(DPBenchmarkError):
-    """Sysbench execution failed error."""
-
-
 class DPBenchmarkMissingOptionsError(DPBenchmarkError):
     """Sysbench missing options error."""
-
-
-class DPBenchmarkDBRelationNotAvailableError(DPBenchmarkError):
-    """Sysbench failed to execute a command."""
 
 
 class DPBenchmarkLifecycleState(Enum):
