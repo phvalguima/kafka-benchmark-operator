@@ -35,8 +35,8 @@ class PeerRelationHandler(Object):
         )
 
     @abstractmethod
-    def workers(self) -> list[str]:
-        """Return the peer workers."""
+    def peers(self) -> list[str]:
+        """Return the peers' IPs or any other relevant reference."""
         ...
 
     def _on_peer_changed(self, _):

@@ -92,6 +92,7 @@ class ConfigManager:
             report_interval=self.config.get("report_interval"),
             workload_profile=self.config.get("workload_profile"),
             labels=self.labels,
+            peers=",".join(self.peer.peers()),
         )
 
     def is_collecting(self) -> bool:

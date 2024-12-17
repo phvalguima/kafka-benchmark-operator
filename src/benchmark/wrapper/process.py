@@ -26,6 +26,7 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(filename='/var/log/dpe_benchmark_workload.log', encoding='utf-8', level=logging.INFO)
 
 
 class BenchmarkProcess(ABC):
@@ -61,6 +62,7 @@ class BenchmarkProcess(ABC):
             stderr=subprocess.PIPE,
             universal_newlines=True,
             shell=True,
+            cwd=self.model.cwd,
         )
         # Now, let's make stdout a non-blocking file
         os.set_blocking(self._proc.stdout.fileno(), False)
@@ -100,7 +102,7 @@ class BenchmarkProcess(ABC):
                 # Log the output.
                 # This way, an user can see what the process is doing and
                 # some of the metrics will be readily available without COS.
-                logger.info(line)
+                logger.info(f"[workload pid {self._proc.pid}] " + line)
 
                 if self.status() != ProcessStatus.RUNNING:
                     # Process has finished

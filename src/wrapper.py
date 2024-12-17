@@ -3,7 +3,7 @@
 # See LICENSE file for licensing details.
 
 """This script runs the benchmark tool, collects its output and forwards to prometheus."""
-
+import os
 import argparse
 
 from overrides import override
@@ -54,6 +54,7 @@ class KafkaMainWrapper(MainWrapper):
 
 class KafkaBenchmarkProcess(BenchmarkProcess):
     """This class models one of the processes being executed in the benchmark."""
+
     @override
     def process_line(self, line: str) -> str | None:
         """Process the line and return the metric."""
@@ -68,6 +69,15 @@ class KafkaBenchmarkManager(BenchmarkManager):
         """Process the output of the process."""
         ...
 
+    @override
+    def start(self):
+        """Start the benchmark tool."""
+        for worker in self.workers:
+            worker.start()
+        if self.model:
+            # In Kafka, we start the manager after the workers
+            BenchmarkProcess.start(self)
+
 
 class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     """This class maps the workload model to the process."""
@@ -81,20 +91,31 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     @override
     def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
-        driver_path = f"bin/{self.args.workload}-driver"
-        workload_path = f"bin/{self.args.workload}-workload"
+        driver_path = "/root/.benchmark/charmed_parameters/dpe_benchmark.json"
+        workload_path = "/root/.benchmark/charmed_parameters/worker_params.yaml"
         processes = [
             KafkaBenchmarkProcess(
                 model=ProcessModel(
-                    cmd=f"""sudo bin/benchmark --drivers {driver_path} {workload_path}""",
+                    cmd=f"""sudo bin/benchmark-worker -p {peer.split(":")[1]} -sp {int(peer.split(":")[1]) + 1}""",
+                    cwd=os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "../openmessaging-benchmark/",
+                    ),
                 ),
                 args=self.args,
                 metrics=self.metrics,
-            ),
+            )
+            for peer in self.args.peers.split(",")
         ]
+        workers = ",".join([f"http://{peer}" for peer in self.args.peers.split(",")])
+
         manager = KafkaBenchmarkManager(
             model=ProcessModel(
-                cmd=f"""sudo bin/benchmark --drivers {driver_path} {workload_path}""",
+                cmd=f"""sudo bin/benchmark --workers {workers} --drivers {driver_path} {workload_path}""",
+                cwd=os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "../openmessaging-benchmark/",
+                ),
             ),
             args=self.args,
             metrics=self.metrics,
@@ -124,7 +145,7 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=int, default=0)
     parser.add_argument("--run_count", type=int, default=1)
     parser.add_argument(
-        "--target_hosts", type=str, default="", help="comma-separated list of target hosts"
+        "--peers", type=str, default="", help="comma-separated list of peers to be used."
     )
     parser.add_argument(
         "--extra_labels",
@@ -138,4 +159,5 @@ if __name__ == "__main__":
     #     47c5a0f307cff3ed477528536e8de095c0752efa/Lib/argparse.py#L134
     args = parser.parse_args()
     args.command = BenchmarkCommand(parser.parse_args().command.lower())
-    KafkaMainWrapper(WorkloadCLIArgsModel.parse_obj(args.__dict__)).run()
+    main_wrapper = KafkaMainWrapper(WorkloadCLIArgsModel.parse_obj(args.__dict__))
+    main_wrapper.run()

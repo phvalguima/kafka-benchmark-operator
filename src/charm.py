@@ -20,11 +20,14 @@ from functools import cached_property
 from typing import Any, Optional
 
 import ops
+import charms.operator_libs_linux.v0.apt as apt
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
 from charms.kafka.v0.client import KafkaClient, NewTopic
 from ops.charm import CharmBase
 from ops.model import Application, Relation, Unit
 from overrides import override
+from ops.framework import EventBase
+from ops.model import BlockedStatus
 
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.core.models import (
@@ -38,6 +41,8 @@ from benchmark.literals import PEER_RELATION
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
+from benchmark.literals import DPBenchmarkLifecycleTransition
+
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -54,7 +59,7 @@ topicConfig: |
 
 commonConfig: |
   security.protocol=SASL_PLAINTEXT
-  bootstrap.servers={{ list_of_brokers_bootstrap }}
+  {{ list_of_brokers_bootstrap }}
   sasl.mechanism=SCRAM-SHA-512
   sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username={{ username }} password={{ password }};
 
@@ -83,6 +88,20 @@ producersPerTopic: {{ partitionsPerTopic }}
 producerRate: 50000
 consumerBacklogSizeGB: 0
 testDurationMinutes: {{ duration }}
+"""
+
+KAFKA_SYSTEMD_SERVICE_TEMPLATE = """[Unit]
+Description=Service for controlling kafka openmessaging benchmark
+Wants=network.target
+Requires=network.target
+
+[Service]
+EnvironmentFile=-/etc/environment
+Environment=PYTHONPATH={{ charm_root }}/lib:{{ charm_root }}/venv:{{ charm_root }}/src/benchmark/wrapper
+ExecStart={{ charm_root }}/src/wrapper.py --test_name={{ test_name }} --command={{ command }} --workload={{ workload_name }} --threads={{ threads }} --parallel_processes={{ parallel_processes }} --duration={{ duration }} --peers={{ peers }} --extra_labels={{ labels }} {{ extra_config }}
+Restart=no
+TimeoutSec=600
+Type=simple
 """
 
 WORKER_PARAMS_YAML_FILE = "worker_params.yaml"
@@ -169,12 +188,12 @@ class KafkaPeersRelationHandler(PeerRelationHandler):
     """Listens to all the peer-related events and react to them."""
 
     @override
-    def workers(self) -> list[str]:
-        """Return the peer workers."""
+    def peers(self) -> list[str]:
+        """Return the peers."""
         return [
-            f"http://{self.relation.data[u]['ingress-address']}:{port}"
-            for u in self.units() + [self.this_unit()]
-            for port in range(8080, 8080 + self.charm.config.get("parallel_processes"))
+            f"{self.relation.data[u]['ingress-address']}:{8080 + 2 * port}"
+            for u in list(self.units()) + [self.this_unit()]
+            for port in range(0, self.charm.config.get("parallel_processes"))
         ]
 
 
@@ -197,25 +216,68 @@ class KafkaConfigManager(ConfigManager):
         self.database = database
         self.labels = labels
 
+    @override
+    def _render_service(
+        self,
+        transition: DPBenchmarkLifecycleTransition,
+        dst_path: str | None = None,
+    ) -> str | None:
+        """Render the workload parameters."""
+        values = self.get_execution_options().dict() | {
+            "charm_root": os.environ.get("CHARM_DIR", ""),
+            "command": transition.value,
+        }
+        return self._render(
+            values=values,
+            template_file=None,
+            template_content=KAFKA_SYSTEMD_SERVICE_TEMPLATE,
+            dst_filepath=dst_path,
+        )
+
+    @override
+    def _check(
+        self,
+        transition: DPBenchmarkLifecycleTransition,
+    ) -> bool:
+        if not (
+            os.path.exists(self.workload.paths.service)
+            and os.path.exists(self.workload.paths.workload_params)
+            and (values := self.get_execution_options())
+        ):
+            return False
+        values = values.dict() | {
+            "charm_root": os.environ.get("CHARM_DIR", ""),
+            "command": transition.value,
+            "target_hosts": values.db_info.hosts,
+        }
+        compare_svc = "\n".join(self.workload.read(self.workload.paths.service)) == self._render(
+            values=values,
+            template_file=None,
+            template_content=KAFKA_SYSTEMD_SERVICE_TEMPLATE,
+            dst_filepath=None,
+        )
+        compare_params = "\n".join(
+            self.workload.read(self.workload.paths.workload_params)
+        ) == self._render(
+            values=self.get_workload_params(),
+            template_file=None,
+            template_content=self.workload.workload_params_template,
+            dst_filepath=None,
+        )
+        return compare_svc and compare_params
+
     def get_worker_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
         db = self.database.state.get()
 
         return {
             "total_number_of_brokers": len(self.peer.units()) + 1,
-            "list_of_brokers_bootstrap": self.database.bootstrap_servers(),
+            # We cannot have quotes nor brackets in this string.
+            # Therefore, we render the entire line instead
+            "list_of_brokers_bootstrap": "bootstrap.servers={}".format(",".join(self.database.bootstrap_servers())),
             "username": db.username,
             "password": db.password,
             "threads": self.config.get("threads", 1) if self.config.get("threads") > 0 else 1,
-        }
-
-    @override
-    def get_workload_params(self) -> dict[str, Any]:
-        """Return the worker parameters."""
-        return {
-            "partitionsPerTopic": self.config.get("threads"),
-            "duration": int(self.config.get("duration") / 60) if self.config.get("duration") > 0 else TEN_YEARS_IN_MINUTES,
-            "charm_root": os.environ.get("CHARM_DIR", ""),
         }
 
     def _render_worker_params(
@@ -231,6 +293,15 @@ class KafkaConfigManager(ConfigManager):
         )
 
     @override
+    def get_workload_params(self) -> dict[str, Any]:
+        """Return the worker parameters."""
+        return {
+            "partitionsPerTopic": self.config.get("parallel_processes"),
+            "duration": int(self.config.get("duration") / 60) if self.config.get("duration") > 0 else TEN_YEARS_IN_MINUTES,
+            "charm_root": os.environ.get("CHARM_DIR", ""),
+        }
+
+    @override
     def _render_params(
         self,
         dst_path: str | None = None,
@@ -241,8 +312,6 @@ class KafkaConfigManager(ConfigManager):
 
         This extra file will rendered in the same folder as `dst_path`, but with a different name.
         """
-        import pdb; pdb.set_trace()
-
         super()._render_params(dst_path)
         self._render_worker_params(
             os.path.join(
@@ -336,6 +405,32 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
 
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
+    @override
+    def _on_install(self, event: EventBase) -> None:
+        """Install the charm."""
+        apt.add_package("openjdk-18-jre", update_cache=True)
+
+    @override
+    def _preflight_checks(self) -> bool:
+        """Check if we have the necessary relations.
+
+        In kafka case, we need the client relation to be able to connect to the database.
+        """
+        if self.config.get("parallel_processes") < 2:
+            logger.error("The number of parallel processes must be greater than 1.")
+            self.unit.status = BlockedStatus("The number of parallel processes must be greater than 1.")
+            return False
+        return super()._preflight_checks()
+
+    @override
+    def _on_config_changed(self, event):
+        """Handle the config changed event."""
+        if not self._preflight_checks():
+            event.defer()
+            return
+        return super()._on_config_changed(event)
+
+    @override
     def supported_workloads(self) -> list[str]:
         """List of supported workloads."""
         return ["default"]

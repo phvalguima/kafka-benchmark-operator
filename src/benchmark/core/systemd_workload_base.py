@@ -12,7 +12,7 @@ import subprocess
 
 from charms.operator_libs_linux.v1.systemd import (
     service_failed,
-    service_reload,
+    daemon_reload,
     service_restart,
     service_running,
     service_stop,
@@ -98,7 +98,7 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     @override
     def reload(self) -> bool:
         """Reloads the script."""
-        service_reload(self.paths.svc_name)
+        daemon_reload()
 
     @override
     def read(self, path: str) -> list[str]:

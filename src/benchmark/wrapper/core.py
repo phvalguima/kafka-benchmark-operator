@@ -37,6 +37,7 @@ class ProcessModel(BaseModel):
     status: str = ProcessStatus.TO_START
     user: str | None = None
     group: str | None = None
+    cwd: str | None = None
 
 
 class MetricOptionsModel(BaseModel):
@@ -57,9 +58,9 @@ class WorkloadCLIArgsModel(BaseModel):
     parallel_processes: int
     duration: int
     run_count: int
-    target_hosts: str
     report_interval: int
     extra_labels: str
+    peers: str
 
 
 class BenchmarkMetrics:
