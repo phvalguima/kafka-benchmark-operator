@@ -4,6 +4,8 @@
 
 """This script runs the benchmark tool, collects its output and forwards to prometheus."""
 import os
+import re
+import time
 import argparse
 
 from overrides import override
@@ -22,25 +24,56 @@ from benchmark.wrapper.process import BenchmarkManager, BenchmarkProcess, Worklo
 
 class KafkaBenchmarkSample(BaseModel):
 
-    timestamp: float
     produce_rate: float  # in msgs / s
     produce_throughput: float  # in MB/s
-    produce_error_rate: int  # in err/s
+    produce_error_rate: float  # in err/s
+
     produce_latency_avg: float  # in (ms)
     produce_latency_50: float
     produce_latency_99: float
     produce_latency_99_9: float
     produce_latency_max: float
 
+    produce_delay_latency_avg: float  # in (us)
+    produce_delay_latency_50: float
+    produce_delay_latency_99: float
+    produce_delay_latency_99_9: float
+    produce_delay_latency_max: float
+
     consume_rate: float  # in msgs / s
     consume_throughput: float  # in MB/s
-    consume_error_rate: int  # in err/s
     consume_backlog: float  # in KB
+
+
+class KafkaBenchmarkSampleMatcher(BaseModel):
+
+    produce_rate: str = r'Pub rate\s+(.*?)\s+msg/s'
+    produce_throughput: str = r'Pub rate\s+\d+.\d+\s+msg/s\s+/\s+(.*?)\s+MB/s'
+    produce_error_rate: str = r'Pub err\s+(.*?)\s+err/s'
+    produce_latency_avg: str = r'Pub Latency \(ms\) avg:\s+(.*?)\s+'
+    # Match: Pub Latency (ms) avg: 1478.1 - 50%: 1312.6 - 99%: 4981.5 - 99.9%: 5104.7 - Max: 5110.5
+    # Generates: [('1478.1', '1312.6', '4981.5', '5104.7', '5110.5')]
+    produce_latency_percentiles: str = r'Pub Latency \(ms\) avg:\s+(.*?)\s+- 50%:\s+(.*?)\s+- 99%:\s+(.*?)\s+- 99.9%:\s+(.*?)\s+- Max:\s+(.*?)\s+'
+
+    # Pub Delay Latency (us) avg: 21603452.9 - 50%: 21861759.0 - 99%: 23621631.0 - 99.9%: 24160895.0 - Max: 24163839.0
+    # Generates: [('21603452.9', '21861759.0', '23621631.0', '24160895.0', '24163839.0')]
+    produce_latency_delay_percentiles: str = r'Pub Delay Latency \(us\) avg:\s+(.*?)\s+- 50%:\s+(.*?)\s+- 99%:\s+(.*?)\s+- 99.9%:\s+(.*?)\s+- Max:\s+(\d+\.\d+)'
+
+    consume_rate: str = r'Cons rate\s+(.*?)\s+msg/s'
+    consume_throughput: str = r'Cons rate\s+\d+.\d+\s+msg/s\s+/\s+(.*?)\s+MB/s'
+    consume_backlog: str = r'Backlog:\s+(.*?)\s+K'
+
 
 
 class KafkaMainWrapper(MainWrapper):
 
     def __init__(self, args: WorkloadCLIArgsModel):
+        # As seen in the openmessaging code:
+        # https://github.com/openmessaging/benchmark/blob/ \
+        #     b10b22767f8063321c90bc9ee1b0aadc5902c31a/benchmark-framework/ \
+        #     src/main/java/io/openmessaging/benchmark/WorkloadGenerator.java#L352
+        # The report interval is hardcoded to 10 seconds
+        args.report_interval = 10
         super().__init__(args)
         metrics = BenchmarkMetrics(
             options=MetricOptionsModel(
@@ -56,18 +89,55 @@ class KafkaBenchmarkProcess(BenchmarkProcess):
     """This class models one of the processes being executed in the benchmark."""
 
     @override
-    def process_line(self, line: str) -> str | None:
+    def process_line(self, line: str) -> BaseModel | None:
         """Process the line and return the metric."""
-        # Kafka has nothing to process
+        # Kafka has nothing to process, we never match it
         return None
 
 
 class KafkaBenchmarkManager(BenchmarkManager):
     """This class is in charge of managing all the processes in the benchmark run."""
+
+    matcher: KafkaBenchmarkSampleMatcher = KafkaBenchmarkSampleMatcher()
+
     @override
-    def process_line(self, line: str) -> str | None:
+    def process_line(self, line: str) -> BaseModel | None:
         """Process the output of the process."""
-        ...
+        # First, check if we have a match:
+        try:
+            if not (pub_rate := re.findall(self.matcher.produce_rate, line)):
+                # Nothing found, we can have an early return
+                return None
+
+            if not (prod_percentiles := re.findall(self.matcher.produce_latency_percentiles, line)):
+                return None
+
+            if not (delay_percentiles := re.findall(self.matcher.produce_latency_delay_percentiles, line)):
+                return None
+
+            return KafkaBenchmarkSample(
+                produce_rate=float(pub_rate[0]),
+                produce_throughput=float(re.findall(self.matcher.produce_throughput, line)[0]),
+                produce_error_rate=float(re.findall(self.matcher.produce_error_rate, line)[0]),
+
+                produce_latency_avg=float(prod_percentiles[0][0]),
+                produce_latency_50=float(prod_percentiles[0][1]),
+                produce_latency_99=float(prod_percentiles[0][2]),
+                produce_latency_99_9=float(prod_percentiles[0][3]),
+                produce_latency_max=float(prod_percentiles[0][4]),
+
+                produce_delay_latency_avg=float(delay_percentiles[0][0]),
+                produce_delay_latency_50=float(delay_percentiles[0][1]),
+                produce_delay_latency_99=float(delay_percentiles[0][2]),
+                produce_delay_latency_99_9=float(delay_percentiles[0][3]),
+                produce_delay_latency_max=float(delay_percentiles[0][4]),
+
+                consume_rate=float(re.findall(self.matcher.consume_rate, line)[0]),
+                consume_throughput=float(re.findall(self.matcher.consume_throughput, line)[0]),
+                consume_backlog=float(re.findall(self.matcher.consume_backlog, line)[0]),
+            )
+        except Exception as e:
+            return None
 
     @override
     def start(self):
@@ -91,8 +161,8 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     @override
     def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
-        driver_path = "/root/.benchmark/charmed_parameters/dpe_benchmark.json"
-        workload_path = "/root/.benchmark/charmed_parameters/worker_params.yaml"
+        driver_path = "/root/.benchmark/charmed_parameters/worker_params.yaml"
+        workload_path = "/root/.benchmark/charmed_parameters/dpe_benchmark.json"
         processes = [
             KafkaBenchmarkProcess(
                 model=ProcessModel(

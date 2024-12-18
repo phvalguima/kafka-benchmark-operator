@@ -29,10 +29,14 @@ from overrides import override
 from ops.framework import EventBase
 from ops.model import BlockedStatus
 
+from benchmark.literals import (
+    DPBenchmarkMissingOptionsError,
+)
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.core.models import (
     DatabaseState,
     RelationState,
+    DPBenchmarkBaseDatabaseModel,
 )
 from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
@@ -120,6 +124,22 @@ class KafkaDatabaseState(DatabaseState):
             data=data,
         )
         self.database_key = "topic"
+
+    def get(self) -> DPBenchmarkBaseDatabaseModel | None:
+        """Returns the value of the key."""
+        if not self.relation or not (endpoints := self.remote_data.get("endpoints")):
+            return None
+
+        dbmodel = super().get()
+        return DPBenchmarkBaseDatabaseModel(
+            hosts=endpoints.split(","),
+            unix_socket=dbmodel.unix_socket,
+            username=dbmodel.username,
+            password=dbmodel.password,
+            db_name=dbmodel.db_name,
+            tls=self.tls,
+            tls_ca=self.tls_ca,
+        )
 
 
 class KafkaDatabaseRelationHandler(DatabaseRelationHandler):

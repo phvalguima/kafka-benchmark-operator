@@ -13,6 +13,7 @@ import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
+from pydantic import BaseModel
 
 from core import (
     BenchmarkCommand,
@@ -99,17 +100,17 @@ class BenchmarkProcess(ABC):
                 if output := self.process_line(line):
                     self.metrics.add(output)
 
+                    if self.status() != ProcessStatus.RUNNING:
+                        # Process has finished
+                        break
+
+                    to_wait = False
+
                 # Log the output.
                 # This way, an user can see what the process is doing and
                 # some of the metrics will be readily available without COS.
-                logger.info(f"[workload pid {self._proc.pid}] " + line)
-
-                if self.status() != ProcessStatus.RUNNING:
-                    # Process has finished
-                    break
-
-                await asyncio.sleep(self.args.report_interval)
-                to_wait = False
+                print(f"[workload pid {self._proc.pid}] " + line.rstrip())
+                # logger.info(f"[workload pid {self._proc.pid}] " + line.rstrip())
 
             if to_wait:
                 # In case the stdout is empty, we ensure we sleep anyways
@@ -133,7 +134,7 @@ class BenchmarkProcess(ABC):
         self.model.status = ProcessStatus.STOPPED
 
     @abstractmethod
-    def process_line(self, line: str) -> str | None:
+    def process_line(self, line: str) -> BaseModel | None:
         """Process the output of the process."""
         ...
 

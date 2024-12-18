@@ -78,7 +78,7 @@ class BenchmarkMetrics:
         for key, value in sample.dict().items():
             if self.options.label not in self.metrics:
                 self.metrics[f"{self.options.label}_{key}"] = Gauge(
-                    self.options.label,
+                    f"{self.options.label}_{key}",
                     f"{self.options.description} {key}",
                     ["model", "unit"],
                 )

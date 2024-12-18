@@ -236,7 +236,10 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         """Check if we have the necessary relations."""
         if len(self.peers.units()) > 0 and not bool(self.peers.state.get()):
             return False
-        return bool(self.database.state.get())
+        try:
+            return bool(self.database.state.get())
+        except DPBenchmarkMissingOptionsError:
+            return False
 
     def on_prepare_action(self, event: EventBase) -> None:
         """Process the prepare action."""
