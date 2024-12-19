@@ -11,8 +11,8 @@ import os
 import subprocess
 
 from charms.operator_libs_linux.v1.systemd import (
-    service_failed,
     daemon_reload,
+    service_failed,
     service_restart,
     service_running,
     service_stop,

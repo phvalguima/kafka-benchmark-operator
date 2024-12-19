@@ -76,10 +76,12 @@ class BenchmarkMetrics:
     def add(self, sample: BaseModel):
         """Add the benchmark to the prometheus metric."""
         for key, value in sample.dict().items():
-            if self.options.label not in self.metrics:
+            if f"{self.options.label}_{key}" not in self.metrics:
                 self.metrics[f"{self.options.label}_{key}"] = Gauge(
                     f"{self.options.label}_{key}",
                     f"{self.options.description} {key}",
                     ["model", "unit"],
                 )
-            self.metrics[f"{self.options.label}_{key}"].labels(*self.options.extra_labels).set(value)
+            self.metrics[f"{self.options.label}_{key}"].labels(*self.options.extra_labels).set(
+                value
+            )

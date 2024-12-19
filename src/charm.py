@@ -14,39 +14,37 @@ The next step is to execute the run action. This action renders the systemd serv
 starts the service. If the target is missing, then service errors and returns an error to
 the user.
 """
+
 import logging
 import os
 from functools import cached_property
 from typing import Any, Optional
 
-import ops
 import charms.operator_libs_linux.v0.apt as apt
+import ops
 from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
 from charms.kafka.v0.client import KafkaClient, NewTopic
 from ops.charm import CharmBase
-from ops.model import Application, Relation, Unit
-from overrides import override
 from ops.framework import EventBase
-from ops.model import BlockedStatus
+from ops.model import Application, BlockedStatus, Relation, Unit
+from overrides import override
 
-from benchmark.literals import (
-    DPBenchmarkMissingOptionsError,
-)
 from benchmark.base_charm import DPBenchmarkCharmBase
 from benchmark.core.models import (
     DatabaseState,
-    RelationState,
     DPBenchmarkBaseDatabaseModel,
+    RelationState,
 )
 from benchmark.core.workload_base import WorkloadBase
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
-from benchmark.literals import PEER_RELATION
+from benchmark.literals import (
+    PEER_RELATION,
+    DPBenchmarkLifecycleTransition,
+)
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, TOPIC_NAME
-from benchmark.literals import DPBenchmarkLifecycleTransition
-
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -65,7 +63,7 @@ commonConfig: |
   security.protocol=SASL_PLAINTEXT
   {{ list_of_brokers_bootstrap }}
   sasl.mechanism=SCRAM-SHA-512
-  sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username={{ username }} password={{ password }};
+  sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="{{ username }}" password="{{ password }}";
 
 producerConfig: |
   max.in.flight.requests.per.connection={{ threads }}
@@ -199,6 +197,7 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         return self.state.get().hosts
 
     def tls(self) -> tuple[str, str] | None:
+        """Return the TLS certificates."""
         if not self.state.tls_ca:
             return self.state.tls, None
         return self.state.tls, self.state.tls_ca
@@ -294,16 +293,18 @@ class KafkaConfigManager(ConfigManager):
             "total_number_of_brokers": len(self.peer.units()) + 1,
             # We cannot have quotes nor brackets in this string.
             # Therefore, we render the entire line instead
-            "list_of_brokers_bootstrap": "bootstrap.servers={}".format(",".join(self.database.bootstrap_servers())),
+            "list_of_brokers_bootstrap": "bootstrap.servers={}".format(
+                ",".join(self.database.bootstrap_servers())
+            ),
             "username": db.username,
             "password": db.password,
             "threads": self.config.get("threads", 1) if self.config.get("threads") > 0 else 1,
         }
 
     def _render_worker_params(
-            self,
-            dst_path: str | None = None,
-        ) -> str|None:
+        self,
+        dst_path: str | None = None,
+    ) -> str | None:
         """Render the worker parameters."""
         return self._render(
             values=self.get_worker_params(),
@@ -317,7 +318,9 @@ class KafkaConfigManager(ConfigManager):
         """Return the worker parameters."""
         return {
             "partitionsPerTopic": self.config.get("parallel_processes"),
-            "duration": int(self.config.get("duration") / 60) if self.config.get("duration") > 0 else TEN_YEARS_IN_MINUTES,
+            "duration": int(self.config.get("duration") / 60)
+            if self.config.get("duration") > 0
+            else TEN_YEARS_IN_MINUTES,
             "charm_root": os.environ.get("CHARM_DIR", ""),
         }
 
@@ -438,7 +441,9 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
         """
         if self.config.get("parallel_processes") < 2:
             logger.error("The number of parallel processes must be greater than 1.")
-            self.unit.status = BlockedStatus("The number of parallel processes must be greater than 1.")
+            self.unit.status = BlockedStatus(
+                "The number of parallel processes must be greater than 1."
+            )
             return False
         return super()._preflight_checks()
 

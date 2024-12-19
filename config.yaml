@@ -7,12 +7,12 @@ options:
       It is the string that represents the given test (e.g. "aws_c6a.xlarge_3nodes_<WORKLOAD>").
       It is used by the collector to put the final data on the right place.
   parallel_processes:
-    default: 8
+    default: 2
     type: int
     description: |
-      Number of parallel process managed by the benchmark tool.
+      Number of parallel process managed by the benchmark tool. Minimum is 2.
   threads:
-    default: 8
+    default: 1
     type: int
     description: |
       Number of concurrent tasks within a given process.

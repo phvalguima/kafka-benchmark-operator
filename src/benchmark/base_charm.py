@@ -78,7 +78,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
     RESOURCE_DEB_NAME = "benchmark-deb"
     workload_params_template = ""
 
-    def __init__(self, *args, db_relation_name: str, workload: WorkloadBase|None = None):
+    def __init__(self, *args, db_relation_name: str, workload: WorkloadBase | None = None):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -103,9 +103,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
         # Trigger an update status as we want to know if the relation is ready
-        self.framework.observe(
-            self.on[db_relation_name].relation_changed, self._on_update_status
-        )
+        self.framework.observe(self.on[db_relation_name].relation_changed, self._on_update_status)
 
         if workload:
             self.workload = workload
@@ -188,7 +186,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         # We need to narrow the options of workload_name to the supported ones
         if self.config.get("workload_name") not in self.supported_workloads():
-            self.unit.status = BlockedStatus(f"Unsupported workload: {self.config.get('workload_name')}")
+            self.unit.status = BlockedStatus(
+                f"Unsupported workload: {self.config.get('workload_name')}"
+            )
             return
 
         # Now, let's check if we need to update our lifecycle position
@@ -199,7 +199,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         """Config changed event."""
         # We need to narrow the options of workload_name to the supported ones
         if self.config.get("workload_name") not in self.supported_workloads():
-            self.unit.status = BlockedStatus(f"Unsupported workload: {self.config.get('workload_name')}")
+            self.unit.status = BlockedStatus(
+                f"Unsupported workload: {self.config.get('workload_name')}"
+            )
             return
 
         if not self.config_manager.is_prepared():

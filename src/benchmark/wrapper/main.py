@@ -12,6 +12,7 @@ from prometheus_client import start_http_server
 
 
 class MainWrapper:
+    """Main class to manage the benchmark tool."""
 
     mapping: WorkloadToProcessMapping
 

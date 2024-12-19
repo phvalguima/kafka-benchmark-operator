@@ -108,7 +108,7 @@ class DPBenchmarkWrapperOptionsModel(BaseModel):
     report_interval: int
     workload_profile: str
     labels: str
-    peers: str|None = None
+    peers: str | None = None
 
 
 class RelationState:

@@ -13,7 +13,6 @@ import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
 
 from core import (
     BenchmarkCommand,
@@ -22,12 +21,15 @@ from core import (
     ProcessStatus,
     WorkloadCLIArgsModel,
 )
+from pydantic import BaseModel
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename='/var/log/dpe_benchmark_workload.log', encoding='utf-8', level=logging.INFO)
+logging.basicConfig(
+    filename="/var/log/dpe_benchmark_workload.log", encoding="utf-8", level=logging.INFO
+)
 
 
 class BenchmarkProcess(ABC):
@@ -109,8 +111,7 @@ class BenchmarkProcess(ABC):
                 # Log the output.
                 # This way, an user can see what the process is doing and
                 # some of the metrics will be readily available without COS.
-                print(f"[workload pid {self._proc.pid}] " + line.rstrip())
-                # logger.info(f"[workload pid {self._proc.pid}] " + line.rstrip())
+                logger.info(f"[workload pid {self._proc.pid}] " + line.rstrip())
 
             if to_wait:
                 # In case the stdout is empty, we ensure we sleep anyways
