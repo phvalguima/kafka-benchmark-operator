@@ -16,9 +16,20 @@ class WorkloadTemplatePaths(ABC):
         return "dpe_benchmark"
 
     @property
+    def charm_dir(self) -> str:
+        """The path to the benchmark script."""
+        # If we do not have this set, then we have a bigger problem
+        return os.environ["CHARM_DIR"]
+
+    @property
     def bin(self) -> str:
         """The path to the benchmark script."""
-        return os.path.join(os.environ.get("CHARM_DIR", ""), "src/benchmark/wrapper/main.py")
+        return os.path.join(self.charm_dir, "src/benchmark/wrapper/main.py")
+
+    @property
+    def templates(self) -> str:
+        """The path to the workload template folder."""
+        return os.path.join(self.charm_dir, "templates")
 
     @property
     @abstractmethod
@@ -48,12 +59,6 @@ class WorkloadTemplatePaths(ABC):
         """Check if the workload path exist."""
         return os.path.exists(path)
 
-    @property
-    @abstractmethod
-    def templates(self) -> str:
-        """The path to the workload template folder."""
-        ...
-
 
 class WorkloadBase(ABC):
     """Base interface for common workload operations."""
@@ -68,6 +73,16 @@ class WorkloadBase(ABC):
         """Installs the workload."""
         os.chmod(self.paths.bin, 0o700)
         return True
+
+    @abstractmethod
+    def user(self) -> str:
+        """Linux user for the process."""
+        ...
+
+    @abstractmethod
+    def group(self) -> str:
+        """Linux group for the process."""
+        ...
 
     @abstractmethod
     def start(self) -> bool:

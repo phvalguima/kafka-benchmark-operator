@@ -9,6 +9,8 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 TOPIC_NAME = "benchmark_topic"
 CLIENT_RELATION_NAME = "kafka"
 
+JAVA_VERSION = "18"
+
 METRICS_PORT = 8088
 COS_AGENT_RELATION = "cos-agent"
 PEER_RELATION = "benchmark-peer"

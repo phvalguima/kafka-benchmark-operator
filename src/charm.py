@@ -17,6 +17,7 @@ the user.
 
 import logging
 import os
+import subprocess
 from functools import cached_property
 from typing import Any, Optional
 
@@ -26,7 +27,7 @@ from charms.data_platform_libs.v0.data_interfaces import KafkaRequires
 from charms.kafka.v0.client import KafkaClient, NewTopic
 from ops.charm import CharmBase
 from ops.framework import EventBase
-from ops.model import Application, BlockedStatus, Relation, Unit
+from ops.model import Application, BlockedStatus, ModelError, Relation, SecretNotFoundError, Unit
 from overrides import override
 
 from benchmark.base_charm import DPBenchmarkCharmBase
@@ -35,7 +36,7 @@ from benchmark.core.models import (
     DPBenchmarkBaseDatabaseModel,
     RelationState,
 )
-from benchmark.core.workload_base import WorkloadBase
+from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
@@ -44,7 +45,7 @@ from benchmark.literals import (
 )
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
-from literals import CLIENT_RELATION_NAME, TOPIC_NAME
+from literals import CLIENT_RELATION_NAME, JAVA_VERSION, TOPIC_NAME
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -64,6 +65,16 @@ commonConfig: |
   {{ list_of_brokers_bootstrap }}
   sasl.mechanism=SCRAM-SHA-512
   sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="{{ username }}" password="{{ password }}";
+  {{% if truststore_path && truststore_pwd -%}}
+  security.protocol=SASL_SSL
+  ssl.truststore.location={{ truststore_path }}
+  ssl.truststore.password={{ truststore_pwd }}
+  {{%- endif %}}
+  {{% if keystore_path && keystore_pwd -%}}
+  ssl.keystore.location={{ keystore_path }}
+  ssl.keystore.password={{ keystore_pwd }}
+  {{%- endif %}}
+  ssl.client.auth={{ ssl_client_auth }}
 
 producerConfig: |
   max.in.flight.requests.per.connection={{ threads }}
@@ -216,6 +227,162 @@ class KafkaPeersRelationHandler(PeerRelationHandler):
         ]
 
 
+class JavaWorkloadPaths:
+    """Class to manage the Java trust and keystores."""
+
+    def __init__(self, workload: WorkloadTemplatePaths):
+        self.workload = workload
+
+    @property
+    def java_home(self) -> str:
+        """Return the JAVA_HOME path."""
+        return f"/usr/lib/jvm/java-{JAVA_VERSION}-openjdk-amd64"
+
+    @property
+    def keytool(self) -> str:
+        """Return the keytool path."""
+        return os.path.join(self.java_home, "bin/keytool")
+
+    @property
+    def truststore(self) -> str:
+        """Return the truststore path."""
+        return os.path.join(self.workload.charm_dir, "truststore.jks")
+
+    @property
+    def ca(self) -> str:
+        """Return the CA path."""
+        return os.path.join(self.workload.charm_dir, "ca.pem")
+
+    @property
+    def server_certificate(self) -> str:
+        """Return the CA path."""
+        return os.path.join(self.workload.charm_dir, "server_certificate.pem")
+
+    @property
+    def keystore(self) -> str:
+        """Return the keystore path."""
+        return os.path.join(self.workload.charm_dir, "keystore.jks")
+
+
+class JavaTlsStoreManager:
+    """Class to manage the Java trust and keystores."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+    ):
+        self.workload = charm.workload
+        self.java_paths = JavaWorkloadPaths(self.workload.paths)
+        self.charm = charm
+        self.database = charm.database
+        self.relation_name = self.database.relation_name
+        self.ca_alias = "ca"
+        self.cert_alias = "server_certificate"
+
+        self.framework.observe(
+            self.charm.on[self.relation_name].relation_changed, self._on_endpoints_changed
+        )
+
+    def _on_endpoints_changed(self, event: EventBase) -> None:
+        """Handles the endpoints_changed event."""
+        self.set()
+
+    @property
+    def truststore_pwd(self) -> str | None:
+        """Returns the truststore password."""
+        try:
+            return self.charm.model.get_secret(label="truststore").get_content(refresh=True)["pwd"]
+        except (SecretNotFoundError, KeyError):
+            return None
+        except ModelError as e:
+            logger.error(f"Error fetching secret: {e}")
+            return None
+
+    @truststore_pwd.setter
+    def truststore_pwd(self, pwd: str) -> None:
+        """Returns the truststore password."""
+        if not (secret := self.truststore_pwd):
+            self.charm.model.add_secret({"pwd": pwd}, label="truststore")
+            return
+
+        secret.set_content({"pwd": pwd})
+
+    def set(self) -> bool:
+        """Set the truststore and certificates available."""
+        self.set_ca()
+        self.set_certificate()
+        return (
+            self.set_truststore()
+            and self.import_cert(self.ca_alias, self.java_paths.ca)
+            and self.import_cert(self.cert_alias, self.java_paths.server_certificate)
+        )
+
+    def set_ca(self) -> None:
+        """Sets the unit ca."""
+        if not self.database.state.tls_ca:
+            logger.error("Can't set CA to unit, missing CA in relation data")
+            return
+        self.workload.write(
+            content=self.database.state.tls_ca,
+            path=self.java_paths.ca,
+        )
+
+    def set_certificate(self) -> None:
+        """Sets the unit certificate."""
+        if not self.database.state.tls:
+            logger.error("Can't set certificate to unit, missing certificate in relation data")
+            return
+        self.workload.write(
+            content=self.database.state.tls,
+            path=self.java_paths.server_certificate,
+        )
+
+    def set_truststore(self) -> bool:
+        """Adds CA to JKS truststore."""
+        self.workload.write(
+            content=self.database.state.tls_ca,
+            path=self.java_paths.ca,
+        )
+        command = f"{self.java_paths.keytool} \
+            -import -v -alias {self.ca_alias} \
+            -file {self.java_paths.ca} \
+            -keystore {self.java_paths.truststore} \
+            -storepass {self.database.truststore_pwd} \
+            -noprompt"
+        return (
+            self._exec(
+                command=command.split(),
+                working_dir=os.path.dirname(os.path.realpath(self.java_paths.truststore)),
+            )
+            and self._exec(
+                f"chown {self.workload.user}:{self.workload.group} {self.java_paths.truststore}".split()
+            )
+            and self._exec(f"chmod 770 {self.java_paths.truststore}".split())
+        )
+
+    def import_cert(self, alias: str, filename: str) -> bool:
+        """Add a certificate to the truststore."""
+        command = f"{self.java_paths.keytool} \
+            -import -v \
+            -alias {alias} \
+            -file {filename} \
+            -keystore {self.java_paths.truststore} \
+            -storepass {self.database.truststore_pwd} -noprompt"
+        return self._exec(command.split())
+
+    def _exec(self, command: list[str], working_dir: str | None = None) -> bool:
+        """Executes a command in the workload and manages the exceptions.
+
+        Returns True if the command was successful.
+        """
+        try:
+            self.workload.exec(command=command, working_dir=working_dir)
+        except subprocess.CalledProcessError as e:
+            logger.error(e.stdout)
+            return e.stdout and "already exists" in e.stdout
+        return True
+
+
 class KafkaConfigManager(ConfigManager):
     """The config manager class."""
 
@@ -223,12 +390,14 @@ class KafkaConfigManager(ConfigManager):
         self,
         workload: WorkloadBase,
         database: KafkaDatabaseRelationHandler,
+        java_tls: JavaTlsStoreManager,
         peer: KafkaPeersRelationHandler,
         config: dict[str, Any],
         labels: Optional[str] = "",
     ):
         self.workload = workload
         self.workload.worker_params_template = KAFKA_WORKER_PARAMS_TEMPLATE
+        self.java_tls = java_tls
 
         self.config = config
         self.peer = peer
@@ -243,7 +412,7 @@ class KafkaConfigManager(ConfigManager):
     ) -> str | None:
         """Render the workload parameters."""
         values = self.get_execution_options().dict() | {
-            "charm_root": os.environ.get("CHARM_DIR", ""),
+            "charm_root": self.workload.charm_dir,
             "command": transition.value,
         }
         return self._render(
@@ -265,7 +434,7 @@ class KafkaConfigManager(ConfigManager):
         ):
             return False
         values = values.dict() | {
-            "charm_root": os.environ.get("CHARM_DIR", ""),
+            "charm_root": self.workload.charm_dir,
             "command": transition.value,
             "target_hosts": values.db_info.hosts,
         }
@@ -288,7 +457,6 @@ class KafkaConfigManager(ConfigManager):
     def get_worker_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
         db = self.database.state.get()
-
         return {
             "total_number_of_brokers": len(self.peer.units()) + 1,
             # We cannot have quotes nor brackets in this string.
@@ -299,6 +467,9 @@ class KafkaConfigManager(ConfigManager):
             "username": db.username,
             "password": db.password,
             "threads": self.config.get("threads", 1) if self.config.get("threads") > 0 else 1,
+            "truststore_path": self.java_tls.java_paths.truststore,
+            "truststore_pwd": self.java_tls.truststore_pwd,
+            "ssl_client_auth": "none",
         }
 
     def _render_worker_params(
@@ -321,7 +492,7 @@ class KafkaConfigManager(ConfigManager):
             "duration": int(self.config.get("duration") / 60)
             if self.config.get("duration") > 0
             else TEN_YEARS_IN_MINUTES,
-            "charm_root": os.environ.get("CHARM_DIR", ""),
+            "charm_root": self.workload.charm_dir,
         }
 
     @override

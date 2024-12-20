@@ -27,7 +27,7 @@ class Scope(str, Enum):
     APP = "app"
 
 
-METRICS_PORT = 8088
+METRICS_PORT = 8008
 COS_AGENT_RELATION = "cos-agent"
 PEER_RELATION = "benchmark-peer"
 

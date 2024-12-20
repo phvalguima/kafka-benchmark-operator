@@ -28,7 +28,7 @@ class MainWrapper:
 
         signal.signal(signal.SIGINT, _exit)
         signal.signal(signal.SIGTERM, _exit)
-        start_http_server(8088)
+        start_http_server(8008)
 
         # Start the manager and process the output
         manager.start()

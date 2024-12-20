@@ -61,12 +61,6 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
         """Check if the workload template paths exist."""
         return os.path.exists(path)
 
-    @property
-    @override
-    def templates(self) -> str:
-        """The path to the workload template folder."""
-        return os.path.join(os.environ.get("CHARM_DIR", ""), "templates")
-
 
 class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     """Represents the benchmark service backed by systemd."""
@@ -77,6 +71,16 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
     ):
         super().__init__(workload_params_template)
         self.paths = DPBenchmarkSystemdTemplatePaths()
+
+    @override
+    def user(self) -> str:
+        """Linux user for the process."""
+        return "root"
+
+    @override
+    def group(self) -> str:
+        """Linux group for the process."""
+        return "root"
 
     @override
     def start(self) -> bool:
