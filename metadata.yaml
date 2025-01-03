@@ -28,3 +28,6 @@ requires:
   kafka:
     interface: kafka_client
     limit: 1
+  trusted-ca:
+    interface: tls-certificates
+    optional: true

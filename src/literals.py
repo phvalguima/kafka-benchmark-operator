@@ -14,6 +14,7 @@ JAVA_VERSION = "18"
 METRICS_PORT = 8088
 COS_AGENT_RELATION = "cos-agent"
 PEER_RELATION = "benchmark-peer"
+TRUSTED_CA_RELATION = "trusted-ca"
 
 
 class DPBenchmarkError(Exception):

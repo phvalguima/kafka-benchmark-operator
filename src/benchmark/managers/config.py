@@ -192,7 +192,7 @@ class ConfigManager:
     ) -> str | None:
         """Render the workload parameters."""
         values = self.get_execution_options().dict() | {
-            "charm_root": self.workload.charm_dir,
+            "charm_root": self.workload.paths.charm_dir,
             "command": transition.value,
         }
         return self._render(
@@ -213,7 +213,7 @@ class ConfigManager:
         ):
             return False
         values = values.dict() | {
-            "charm_root": self.workload.charm_dir,
+            "charm_root": self.workload.paths.charm_dir,
             "command": transition.value,
             "target_hosts": values.db_info.hosts,
         }

@@ -16,6 +16,7 @@ the user.
 """
 
 import logging
+import json
 import os
 import subprocess
 from functools import cached_property
@@ -39,13 +40,14 @@ from benchmark.core.models import (
 from benchmark.core.workload_base import WorkloadBase, WorkloadTemplatePaths
 from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
+from benchmark.events.handler import RelationHandler
 from benchmark.literals import (
     PEER_RELATION,
     DPBenchmarkLifecycleTransition,
 )
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
-from literals import CLIENT_RELATION_NAME, JAVA_VERSION, TOPIC_NAME
+from literals import CLIENT_RELATION_NAME, JAVA_VERSION, TOPIC_NAME, TRUSTED_CA_RELATION
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -194,7 +196,7 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         return KafkaDatabaseState(
             self.charm.app,
             self.relation,
-            data=self.client.fetch_relation_data()[self.relation.id],
+            data=self.client.fetch_relation_data()[self.relation.id] | {},
         )
 
     @property
@@ -246,22 +248,94 @@ class JavaWorkloadPaths:
     @property
     def truststore(self) -> str:
         """Return the truststore path."""
-        return os.path.join(self.workload.charm_dir, "truststore.jks")
+        return os.path.join(self.workload.paths.charm_dir, "truststore.jks")
 
     @property
     def ca(self) -> str:
         """Return the CA path."""
-        return os.path.join(self.workload.charm_dir, "ca.pem")
+        return os.path.join(self.workload.paths.charm_dir, "ca.pem")
 
     @property
     def server_certificate(self) -> str:
         """Return the CA path."""
-        return os.path.join(self.workload.charm_dir, "server_certificate.pem")
+        return os.path.join(self.workload.paths.charm_dir, "server_certificate.pem")
 
     @property
     def keystore(self) -> str:
         """Return the keystore path."""
-        return os.path.join(self.workload.charm_dir, "keystore.jks")
+        return os.path.join(self.workload.paths.charm_dir, "keystore.jks")
+
+
+class JavaTlsHandler(RelationHandler):
+    """Class to manage the Java trust and keystores."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+    ):
+        self.charm = charm
+
+        self.framework.observe(
+            self.charm.on[TRUSTED_CA_RELATION].relation_created,
+            self._trusted_relation_changed,
+        )
+        self.framework.observe(
+            self.charm.on[TRUSTED_CA_RELATION].relation_joined,
+            self._trusted_relation_changed,
+        )
+        self.framework.observe(
+            self.charm.on[TRUSTED_CA_RELATION].relation_changed,
+            self._trusted_relation_changed,
+        )
+        self.framework.observe(
+            self.charm.on[TRUSTED_CA_RELATION].relation_broken,
+            self._trusted_relation_changed,
+        )
+
+    @classmethod
+    def _load_relation_data(raw_relation_data: dict) -> dict:
+        """Loads relation data from the relation data bag.
+
+        Json loads all data.
+
+        Args:
+            raw_relation_data: Relation data from the databag
+
+        Returns:
+            dict: Relation data in dict format.
+        """
+        certificate_data = dict()
+        for key in raw_relation_data:
+            try:
+                certificate_data[key] = json.loads(raw_relation_data[key])
+            except (json.decoder.JSONDecodeError, TypeError):
+                certificate_data[key] = raw_relation_data[key]
+        return certificate_data
+
+    def _trusted_relation_changed(self, event: EventBase) -> None:
+        """Overrides the requirer logic of TLSInterface."""
+        if not event.relation or not event.relation.app:
+            return
+
+        # Once the certificates have been added, TLS setup has finished
+        if not self.charm.state.unit_broker.certificate:
+            logger.debug("Missing TLS relation, deferring")
+            event.defer()
+            return
+
+        relation_data = JavaTlsHandler._load_relation_data(dict(event.relation.data[event.relation.app]))
+
+        # NOTE: Relation should only be used with one set of certificates,
+        # hence using just the first item on the list.
+        provider_certificates = relation_data.get("certificates", [])
+        if not provider_certificates:
+            logger.warning("No certificates on provider side")
+            event.defer()
+            return
+
+        self.charm.workload.write(
+            content=provider_certificates[0]["ca"], path=self.charm.java_tls_manager.java_paths.ca
+        )
 
 
 class JavaTlsStoreManager:
@@ -279,13 +353,12 @@ class JavaTlsStoreManager:
         self.ca_alias = "ca"
         self.cert_alias = "server_certificate"
 
-        self.framework.observe(
-            self.charm.on[self.relation_name].relation_changed, self._on_endpoints_changed
+    def set(self) -> bool:
+        return (
+            self.set_truststore()
+            and self.import_cert(self.ca_alias, self.java_paths.ca)
+            and self.import_cert(self.cert_alias, self.java_paths.server_certificate)
         )
-
-    def _on_endpoints_changed(self, event: EventBase) -> None:
-        """Handles the endpoints_changed event."""
-        self.set()
 
     @property
     def truststore_pwd(self) -> str | None:
@@ -307,42 +380,17 @@ class JavaTlsStoreManager:
 
         secret.set_content({"pwd": pwd})
 
-    def set(self) -> bool:
-        """Set the truststore and certificates available."""
-        self.set_ca()
-        self.set_certificate()
-        return (
-            self.set_truststore()
-            and self.import_cert(self.ca_alias, self.java_paths.ca)
-            and self.import_cert(self.cert_alias, self.java_paths.server_certificate)
-        )
-
-    def set_ca(self) -> None:
-        """Sets the unit ca."""
-        if not self.database.state.tls_ca:
-            logger.error("Can't set CA to unit, missing CA in relation data")
-            return
-        self.workload.write(
-            content=self.database.state.tls_ca,
-            path=self.java_paths.ca,
-        )
-
-    def set_certificate(self) -> None:
+    def set_certificate(self, certificate: str, path: str) -> None:
         """Sets the unit certificate."""
-        if not self.database.state.tls:
-            logger.error("Can't set certificate to unit, missing certificate in relation data")
-            return
-        self.workload.write(
-            content=self.database.state.tls,
-            path=self.java_paths.server_certificate,
-        )
+        self.workload.write(content=certificate, path=path)
 
     def set_truststore(self) -> bool:
         """Adds CA to JKS truststore."""
-        self.workload.write(
-            content=self.database.state.tls_ca,
-            path=self.java_paths.ca,
-        )
+        if not self.workload.paths.exists(self.java_paths.ca) or not self.workload.paths.exists(
+            self.java_paths.truststore
+        ):
+            return False
+
         command = f"{self.java_paths.keytool} \
             -import -v -alias {self.ca_alias} \
             -file {self.java_paths.ca} \
@@ -412,7 +460,7 @@ class KafkaConfigManager(ConfigManager):
     ) -> str | None:
         """Render the workload parameters."""
         values = self.get_execution_options().dict() | {
-            "charm_root": self.workload.charm_dir,
+            "charm_root": self.workload.paths.charm_dir,
             "command": transition.value,
         }
         return self._render(
@@ -434,7 +482,7 @@ class KafkaConfigManager(ConfigManager):
         ):
             return False
         values = values.dict() | {
-            "charm_root": self.workload.charm_dir,
+            "charm_root": self.workload.paths.charm_dir,
             "command": transition.value,
             "target_hosts": values.db_info.hosts,
         }
@@ -456,6 +504,12 @@ class KafkaConfigManager(ConfigManager):
 
     def get_worker_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
+
+        import pdb; pdb.set_trace()
+
+        # Generate the truststore, if applicable
+        self.java_tls.set()
+
         db = self.database.state.get()
         return {
             "total_number_of_brokers": len(self.peer.units()) + 1,
@@ -492,7 +546,7 @@ class KafkaConfigManager(ConfigManager):
             "duration": int(self.config.get("duration") / 60)
             if self.config.get("duration") > 0
             else TEN_YEARS_IN_MINUTES,
-            "charm_root": self.workload.charm_dir,
+            "charm_root": self.workload.paths.charm_dir,
         }
 
     @override
@@ -517,6 +571,12 @@ class KafkaConfigManager(ConfigManager):
     @override
     def prepare(self) -> bool:
         """Prepare the benchmark service."""
+
+        import pdb; pdb.set_trace()
+
+
+        super().prepare()
+
         # First, clean if a topic already existed
         self.clean()
         try:
@@ -587,10 +647,12 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             self,
             CLIENT_RELATION_NAME,
         )
+        self.java_tls_manager = JavaTlsStoreManager(self)
         self.peer_handler = KafkaPeersRelationHandler(self, PEER_RELATION)
         self.config_manager = KafkaConfigManager(
             workload=self.workload,
             database=self.database,
+            java_tls=self.java_tls_manager,
             peer=self.peer_handler,
             config=self.config,
             labels=self.labels,
@@ -602,7 +664,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     @override
     def _on_install(self, event: EventBase) -> None:
         """Install the charm."""
-        apt.add_package("openjdk-18-jre", update_cache=True)
+        apt.add_package(f"openjdk-{JAVA_VERSION}-jre", update_cache=True)
 
     @override
     def _preflight_checks(self) -> bool:
