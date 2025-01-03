@@ -504,9 +504,6 @@ class KafkaConfigManager(ConfigManager):
 
     def get_worker_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
-
-        import pdb; pdb.set_trace()
-
         # Generate the truststore, if applicable
         self.java_tls.set()
 
