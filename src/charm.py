@@ -47,7 +47,7 @@ from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, JAVA_VERSION, TOPIC_NAME
 
 # TODO: This file must go away once Kafka starts sharing its certificates via client relation
-from tls import JavaTlsStoreManager, JavaTlsHandler
+from tls import JavaTlsHandler, JavaTlsStoreManager
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -131,7 +131,8 @@ class KafkaDatabaseState(DatabaseState):
         component: Application | Unit,
         relation: Relation | None,
         data: dict[str, Any] = {},
-        tls_relation: Relation | None = None,  # TODO: remove once Kafka emits the TLS data via client relation
+        tls_relation: Relation
+        | None = None,  # TODO: remove once Kafka emits the TLS data via client relation
     ):
         super().__init__(
             component=component,

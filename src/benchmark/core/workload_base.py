@@ -74,11 +74,13 @@ class WorkloadBase(ABC):
         os.chmod(self.paths.bin, 0o700)
         return True
 
+    @property
     @abstractmethod
     def user(self) -> str:
         """Linux user for the process."""
         ...
 
+    @property
     @abstractmethod
     def group(self) -> str:
         """Linux group for the process."""

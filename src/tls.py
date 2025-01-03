@@ -5,20 +5,20 @@
 
 """This module contains TLS handlers and managers for the trusted-ca relation."""
 
-import secrets
-import string
 import json
 import logging
 import os
+import secrets
+import string
 import subprocess
 
-from ops.charm import CharmBase
-from ops.framework import EventBase
-from ops.model import ModelError, SecretNotFoundError
 from charms.tls_certificates_interface.v1.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from ops.charm import CharmBase
+from ops.framework import EventBase
+from ops.model import ModelError, SecretNotFoundError
 
 from benchmark.events.handler import RelationHandler
 from literals import TRUSTED_CA_RELATION, TRUSTSTORE_LABEL
@@ -54,9 +54,12 @@ class JavaTlsHandler(RelationHandler):
 
     def _tls_relation_broken(self, event: EventBase) -> None:
         """Handler for `certificates_relation_broken` event."""
-        event.relation.data[self.model.unit]["certificate_signing_requests"] = json.dumps(
-            {"csr": "", "certificate": "", "ca": "", "ca-cert": ""}
-        )
+        event.relation.data[self.model.unit]["certificate_signing_requests"] = json.dumps({
+            "csr": "",
+            "certificate": "",
+            "ca": "",
+            "ca-cert": "",
+        })
 
     def _trusted_relation_joined(self, event: EventBase) -> None:
         """Generate a CSR so the tls-certificates operator works as expected.
@@ -104,9 +107,7 @@ class JavaTlsHandler(RelationHandler):
             # This is a relation broken event, we may not have this information available.
             return
 
-        relation_data = self._load_relation_data(
-            event.relation.data[event.relation.app]
-        )
+        relation_data = self._load_relation_data(event.relation.data[event.relation.app])
 
         if not (provider_certificates := relation_data.get("certificates", [])):
             logger.warning("No certificates on provider side")
@@ -157,7 +158,9 @@ class JavaTlsStoreManager:
     def truststore_pwd(self) -> str | None:
         """Returns the truststore password."""
         try:
-            return self.charm.model.get_secret(label=TRUSTSTORE_LABEL).get_content(refresh=True)["pwd"]
+            return self.charm.model.get_secret(label=TRUSTSTORE_LABEL).get_content(refresh=True)[
+                "pwd"
+            ]
         except (SecretNotFoundError, KeyError):
             return None
         except ModelError as e:
@@ -167,7 +170,7 @@ class JavaTlsStoreManager:
     @truststore_pwd.setter
     def truststore_pwd(self, pwd: str) -> None:
         """Returns the truststore password."""
-        if not (secret := self.truststore_pwd):
+        if not self.truststore_pwd:
             self.charm.unit.add_secret({"pwd": pwd}, label=TRUSTSTORE_LABEL)
             return
 
@@ -179,9 +182,7 @@ class JavaTlsStoreManager:
 
     def set_truststore(self) -> bool:
         """Adds CA to JKS truststore."""
-        if not self.workload.paths.exists(self.java_paths.ca) or not self.workload.paths.exists(
-            self.java_paths.truststore
-        ):
+        if not self.workload.paths.exists(self.java_paths.ca):
             return False
 
         command = f"{self.java_paths.keytool} \
@@ -225,7 +226,7 @@ class JavaTlsStoreManager:
         Returns True if the command was successful.
         """
         try:
-            self.workload.exec(command=command, working_dir=working_dir)
+            self.workload.exec(command=" ".join(command), working_dir=working_dir)
         except subprocess.CalledProcessError as e:
             logger.error(e.stdout)
             return e.stdout and "already exists" in e.stdout

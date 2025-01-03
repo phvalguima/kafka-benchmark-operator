@@ -72,11 +72,13 @@ class DPBenchmarkSystemdWorkloadBase(WorkloadBase):
         super().__init__(workload_params_template)
         self.paths = DPBenchmarkSystemdTemplatePaths()
 
+    @property
     @override
     def user(self) -> str:
         """Linux user for the process."""
         return "root"
 
+    @property
     @override
     def group(self) -> str:
         """Linux group for the process."""

@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 """Java Workload Path details."""
+
 import logging
 import os
 
