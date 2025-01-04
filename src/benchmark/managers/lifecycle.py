@@ -229,6 +229,17 @@ class LifecycleManager:
                 next_state = neighbor
         return next_state or DPBenchmarkLifecycleState.UNSET
 
+
+    def check_all_peers_in_state(self, state: DPBenchmarkLifecycleState) -> bool:
+        """Check if the unit can run the workload.
+
+        That happens if all the peers are set as state value.
+        """
+        for unit in self.peers.units():
+            if state != self.peers.unit_state(unit).lifecycle:
+                return False
+        return True
+
     @property
     def status(self) -> StatusBase:
         """Return the status of the benchmark."""
