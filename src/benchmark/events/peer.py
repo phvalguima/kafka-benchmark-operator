@@ -50,7 +50,9 @@ class PeerRelationHandler(Object):
 
     def _on_peer_changed(self, _):
         """Handle the relation-changed event."""
-        if (next_state := self.charm.lifecycle.next(None)) and self.charm.lifecycle.current() != next_state:
+        if (
+            next_state := self.charm.lifecycle.next(None)
+        ) and self.charm.lifecycle.current() != next_state:
             self.charm.lifecycle.make_transition(next_state)
 
     def _on_new_peer_unit(self, _):

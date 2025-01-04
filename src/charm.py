@@ -216,6 +216,7 @@ class KafkaPeersRelationHandler(PeerRelationHandler):
             for port in range(0, self.charm.config.get("parallel_processes"))
         ]
 
+
 class KafkaConfigManager(ConfigManager):
     """The config manager class."""
 
@@ -419,7 +420,6 @@ class KafkaLifecycleManager(LifecycleManager):
         super().__init__(peers, config_manager)
         self.is_leader = is_leader
 
-
     @override
     def _peers_state(self) -> DPBenchmarkLifecycleState | None:
         next_state = super()._peers_state()
@@ -466,7 +466,9 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             labels=self.labels,
         )
 
-        self.lifecycle = KafkaLifecycleManager(self.peers, self.config_manager, self.unit.is_leader())
+        self.lifecycle = KafkaLifecycleManager(
+            self.peers, self.config_manager, self.unit.is_leader()
+        )
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     @override
