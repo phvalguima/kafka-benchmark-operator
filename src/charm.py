@@ -40,6 +40,7 @@ from benchmark.events.db import DatabaseRelationHandler
 from benchmark.events.peer import PeerRelationHandler
 from benchmark.literals import (
     PEER_RELATION,
+    DPBenchmarkLifecycleState,
     DPBenchmarkLifecycleTransition,
 )
 from benchmark.managers.config import ConfigManager
@@ -444,6 +445,46 @@ class KafkaConfigManager(ConfigManager):
         )
 
 
+class KafkaLifecycleManager(LifecycleManager):
+    """The lifecycle manager class.
+
+    There is one extra case we must consider: before moving to running, we need to ensure
+    all the peers are in the same state are already running.
+    """
+
+    def __init__(
+        self,
+        peers: PeerRelationHandler,
+        config_manager: ConfigManager,
+        is_leader: bool = False,
+    ):
+        super().__init__(peers, config_manager)
+        self.is_leader = is_leader
+
+    @override
+    def _peers_state(self) -> DPBenchmarkLifecycleState | None:
+        next_state = super()._peers_state()
+
+        # Now, there is a special rule: if we are the leader unit, we can only move to RUNNING
+        # if all the peers are already running or if peer count is zero
+        if not self.is_leader:
+            return next_state
+
+        # Check the special case for running && leader
+        if next_state == DPBenchmarkLifecycleState.RUNNING:
+            if len(self.peers.units()) == 0:
+                return DPBenchmarkLifecycleState.RUNNING
+            # Now, as we are not the only unit and we are the leader, we must ensure everyone
+            # is in RUNNING state before moving forward:
+            if self.check_all_peers_in_state(DPBenchmarkLifecycleState.RUNNING):
+                return DPBenchmarkLifecycleState.RUNNING
+
+            # None of the conditions met, we return an empty state
+            return None
+
+        return next_state
+
+
 class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     """Charm the service."""
 
@@ -469,8 +510,10 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             config=self.config,
             labels=self.labels,
         )
-        self.lifecycle = LifecycleManager(self.peers, self.config_manager)
 
+        self.lifecycle = KafkaLifecycleManager(
+            self.peers, self.config_manager, self.unit.is_leader()
+        )
         self.framework.observe(self.database.on.db_config_update, self._on_config_changed)
 
     @override
@@ -491,6 +534,18 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             )
             return False
         return super()._preflight_checks()
+
+    @override
+    def on_run_action(self, event: EventBase) -> None:
+        """Process the run action.
+
+        This method avoids execution of RUN if this unit is a leader. Only non-leaders can
+        kickstart the RUN logic as we need all non-leaders to be RUNNING before leader can start.
+        """
+        if self.unit.is_leader():
+            event.fail("Only non-leaders can start the benchmark")
+            return
+        super().on_run_action(event)
 
     @override
     def _on_config_changed(self, event):

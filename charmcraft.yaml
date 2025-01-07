@@ -21,7 +21,15 @@ parts:
     source: .
     override-build: |
       # Ship the charm contents
-      curl -sSL https://code.launchpad.net/~pguimaraes/openmessaging-benchmark/+git/openmessaging-benchmark/+artifact/280249/+files/openmessaging-benchmark-0.0.1-ubuntu0-20241119152607-linux-x64.tar.gz | tar -zxvf -
+      # curl -sSL https://code.launchpad.net/~pguimaraes/openmessaging-benchmark/+git/openmessaging-benchmark/+artifact/280249/+files/openmessaging-benchmark-0.0.1-ubuntu0-20241119152607-linux-x64.tar.gz | tar -zxvf -
+
+      # For some reason, getting 23 write error in this curl command.
+      # moving away to wget
+      apt update
+      apt install -y wget
+      wget https://code.launchpad.net/~pguimaraes/openmessaging-benchmark/+git/openmessaging-benchmark/+artifact/280249/+files/openmessaging-benchmark-0.0.1-ubuntu0-20241119152607-linux-x64.tar.gz
+      tar -zxvf openmessaging-benchmark-*.tar.gz
+
       mv openmessaging-benchmark-0.0.1-SNAPSHOT/ openmessaging-benchmark/
       craftctl default
     prime:

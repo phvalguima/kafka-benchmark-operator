@@ -6,10 +6,14 @@
 from abc import abstractmethod
 
 from ops.framework import Object
-from ops.model import Unit
+from ops.model import Unit, WaitingStatus
 
 from benchmark.core.models import PeerState
-from benchmark.literals import Scope
+from benchmark.literals import (
+    DPBenchmarkLifecycleState,
+    DPBenchmarkLifecycleTransition,
+    Scope,
+)
 
 
 class PeerRelationHandler(Object):
@@ -29,9 +33,14 @@ class PeerRelationHandler(Object):
             self.charm.on[self.relation_name].relation_changed,
             self._on_peer_changed,
         )
+
+        self.framework.observe(
+            self.charm.on[self.relation_name].relation_joined,
+            self._on_new_peer_unit,
+        )
         self.framework.observe(
             self.charm.on[self.relation_name].relation_departed,
-            self._on_peer_changed,
+            self._on_new_peer_unit,
         )
 
     @abstractmethod
@@ -41,7 +50,23 @@ class PeerRelationHandler(Object):
 
     def _on_peer_changed(self, _):
         """Handle the relation-changed event."""
-        self.charm.lifecycle_update()
+        if (
+            next_state := self.charm.lifecycle.next(None)
+        ) and self.charm.lifecycle.current() != next_state:
+            self.charm.lifecycle.make_transition(next_state)
+
+    def _on_new_peer_unit(self, _):
+        """Handle the relation-joined and relation-departed events."""
+        # We have a new unit coming in. We need to stop the benchmark if running.
+        if self.charm.lifecycle.current() not in [
+            DPBenchmarkLifecycleState.UNSET,
+            DPBenchmarkLifecycleState.PREPARING,
+            DPBenchmarkLifecycleState.AVAILABLE,
+        ]:
+            if not (state := self.charm.lifecycle.next(DPBenchmarkLifecycleTransition.STOP)):
+                return
+            self.charm.lifecycle.make_transition(state)
+            self.unit.status = WaitingStatus("Stopping the benchmark: peer unit count changed.")
 
     def units(self) -> list[Unit]:
         """Return the peer units."""

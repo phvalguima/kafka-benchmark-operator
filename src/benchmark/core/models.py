@@ -169,8 +169,11 @@ class PeerState(RelationState):
     """State collection for the database relation."""
 
     @override
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str | None = None, default: Any = None) -> Any:
         """Returns the value of the key."""
+        if not key:
+            return self.relation_data
+
         return self.relation_data.get(
             key,
             default,
