@@ -428,14 +428,18 @@ class KafkaConfigManager(ConfigManager):
     @cached_property
     def client(self) -> KafkaClient:
         """Return the Kafka client."""
+        has_tls_ca = False
+        if os.path.exists(self.java_tls.java_paths.ca):
+            has_tls_ca = True
+
         state = self.database.state.get()
         return KafkaClient(
             servers=self.database.bootstrap_servers(),
             username=state.username,
             password=state.password,
-            security_protocol="SASL_SSL" if (state.tls or state.tls_ca) else "SASL_PLAINTEXT",
-            cafile_path=state.tls_ca,
-            certfile_path=state.tls,
+            security_protocol="SASL_SSL" if has_tls_ca else "SASL_PLAINTEXT",
+            cafile_path=self.java_tls.java_paths.ca,
+            certfile_path=None,
             replication_factor=len(self.peer.units()) + 1,
         )
 
