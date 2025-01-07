@@ -45,7 +45,7 @@ class BenchmarkProcess(ABC):
 
     def __init__(
         self,
-        model: ProcessModel,
+        model: ProcessModel | None,
         args: WorkloadCLIArgsModel,
         metrics: BenchmarkMetrics,
     ):
@@ -56,6 +56,8 @@ class BenchmarkProcess(ABC):
 
     def start(self):
         """Start the process."""
+        if not self.model:
+            return
         self._proc = subprocess.Popen(
             self.model.cmd,
             user=self.model.user,
@@ -76,6 +78,10 @@ class BenchmarkProcess(ABC):
     def status(self) -> ProcessStatus:
         """Return the status of the process."""
         stat = ProcessStatus.STOPPED
+        if not self._proc:
+            # We are managing only, we do not run a process
+            return ProcessStatus.RUNNING
+
         if self._proc.poll() is None:
             stat = ProcessStatus.RUNNING
         elif self._proc.returncode != 0:
@@ -98,20 +104,21 @@ class BenchmarkProcess(ABC):
             or (self.status() == ProcessStatus.RUNNING and self.args.duration == 0)
         ):
             to_wait = True
-            for line in iter(self._proc.stdout.readline, ""):
-                if output := self.process_line(line):
-                    self.metrics.add(output)
+            if self._proc:
+                for line in iter(self._proc.stdout.readline, ""):
+                    if output := self.process_line(line):
+                        self.metrics.add(output)
 
-                    if self.status() != ProcessStatus.RUNNING:
-                        # Process has finished
-                        break
+                        if self.status() != ProcessStatus.RUNNING:
+                            # Process has finished
+                            break
 
-                    to_wait = False
+                        to_wait = False
 
-                # Log the output.
-                # This way, an user can see what the process is doing and
-                # some of the metrics will be readily available without COS.
-                logger.info(f"[workload pid {self._proc.pid}] " + line.rstrip())
+                    # Log the output.
+                    # This way, an user can see what the process is doing and
+                    # some of the metrics will be readily available without COS.
+                    logger.info(f"[workload pid {self._proc.pid}] " + line.rstrip())
 
             if to_wait:
                 # In case the stdout is empty, we ensure we sleep anyways
@@ -129,7 +136,8 @@ class BenchmarkProcess(ABC):
     def stop(self):
         """Stop the process."""
         try:
-            self._proc.kill()
+            if self._proc:
+                self._proc.kill()
         except Exception as e:
             logger.warning(f"Error stopping worker: {e}")
         self.model.status = ProcessStatus.STOPPED

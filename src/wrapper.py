@@ -184,20 +184,21 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
         ]
         workers = ",".join([f"http://{peer}" for peer in self.args.peers.split(",")])
 
-        manager = None
+        manager_process = None
         if self.args.is_coordinator:
-            manager = KafkaBenchmarkManager(
-                model=ProcessModel(
-                    cmd=f"""sudo bin/benchmark --workers {workers} --drivers {driver_path} {workload_path}""",
-                    cwd=os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        "../openmessaging-benchmark/",
-                    ),
+            manager_process = ProcessModel(
+                cmd=f"""sudo bin/benchmark --workers {workers} --drivers {driver_path} {workload_path}""",
+                cwd=os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "../openmessaging-benchmark/",
                 ),
-                args=self.args,
-                metrics=self.metrics,
-                unstarted_workers=processes,
             )
+        manager = KafkaBenchmarkManager(
+            model=manager_process,
+            args=self.args,
+            metrics=self.metrics,
+            unstarted_workers=processes,
+        )
         return manager, processes
 
     @override

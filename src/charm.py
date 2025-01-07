@@ -268,11 +268,13 @@ class KafkaConfigManager(ConfigManager):
         self.is_leader = is_leader
         self.labels = labels
 
-    def _service_args(self, args: dict[str, Any], transition: DPBenchmarkLifecycleTransition) -> dict[str, Any]:
+    def _service_args(
+        self, args: dict[str, Any], transition: DPBenchmarkLifecycleTransition
+    ) -> dict[str, Any]:
         return args | {
             "charm_root": self.workload.paths.charm_dir,
             "command": transition.value,
-            "is_coordinator": self.is_leader,
+            "is_coordinator": "" if not self.is_leader else "True",
         }
 
     @override
