@@ -114,7 +114,7 @@ Requires=network.target
 [Service]
 EnvironmentFile=-/etc/environment
 Environment=PYTHONPATH={{ charm_root }}/lib:{{ charm_root }}/venv:{{ charm_root }}/src/benchmark/wrapper
-ExecStart={{ charm_root }}/src/wrapper.py --test_name={{ test_name }} --command={{ command }} --workload={{ workload_name }} --threads={{ threads }} --parallel_processes={{ parallel_processes }} --duration={{ duration }} --peers={{ peers }} --extra_labels={{ labels }} {{ extra_config }}
+ExecStart={{ charm_root }}/src/wrapper.py --test_name={{ test_name }} --command={{ command }} --is_coordinator={{ is_coordinator }} --workload={{ workload_name }} --threads={{ threads }} --parallel_processes={{ parallel_processes }} --duration={{ duration }} --peers={{ peers }} --extra_labels={{ labels }} {{ extra_config }}
 Restart=no
 TimeoutSec=600
 Type=simple
@@ -221,7 +221,7 @@ class KafkaDatabaseRelationHandler(DatabaseRelationHandler):
         """Returns the data_interfaces client corresponding to the database."""
         return self._internal_client
 
-    def bootstrap_servers(self) -> str | None:
+    def bootstrap_servers(self) -> list[str] | None:
         """Return the bootstrap servers."""
         return self.state.get().hosts
 
@@ -255,6 +255,7 @@ class KafkaConfigManager(ConfigManager):
         java_tls: JavaTlsStoreManager,
         peer: KafkaPeersRelationHandler,
         config: dict[str, Any],
+        is_leader: bool,
         labels: Optional[str] = "",
     ):
         self.workload = workload
@@ -264,7 +265,15 @@ class KafkaConfigManager(ConfigManager):
         self.config = config
         self.peer = peer
         self.database = database
+        self.is_leader = is_leader
         self.labels = labels
+
+    def _service_args(self, args: dict[str, Any], transition: DPBenchmarkLifecycleTransition) -> dict[str, Any]:
+        return args | {
+            "charm_root": self.workload.paths.charm_dir,
+            "command": transition.value,
+            "is_coordinator": self.is_leader,
+        }
 
     @override
     def _render_service(
@@ -273,10 +282,7 @@ class KafkaConfigManager(ConfigManager):
         dst_path: str | None = None,
     ) -> str | None:
         """Render the workload parameters."""
-        values = self.get_execution_options().dict() | {
-            "charm_root": self.workload.paths.charm_dir,
-            "command": transition.value,
-        }
+        values = self._service_args(self.get_execution_options().dict(), transition)
         return self._render(
             values=values,
             template_file=None,
@@ -295,11 +301,7 @@ class KafkaConfigManager(ConfigManager):
             and (values := self.get_execution_options())
         ):
             return False
-        values = values.dict() | {
-            "charm_root": self.workload.paths.charm_dir,
-            "command": transition.value,
-            "target_hosts": values.db_info.hosts,
-        }
+        values = self._service_args(values.dict(), transition)
         compare_svc = "\n".join(self.workload.read(self.workload.paths.service)) == self._render(
             values=values,
             template_file=None,
@@ -323,7 +325,7 @@ class KafkaConfigManager(ConfigManager):
 
         db = self.database.state.get()
         return {
-            "total_number_of_brokers": len(self.peer.units()) + 1,
+            "total_number_of_brokers": len(self.database.bootstrap_servers()) - 1,
             # We cannot have quotes nor brackets in this string.
             # Therefore, we render the entire line instead
             "list_of_brokers_bootstrap": "bootstrap.servers={}".format(
@@ -441,7 +443,7 @@ class KafkaConfigManager(ConfigManager):
             security_protocol="SASL_SSL" if has_tls_ca else "SASL_PLAINTEXT",
             cafile_path=self.java_tls.java_paths.ca,
             certfile_path=None,
-            replication_factor=len(self.peer.units()) + 1,
+            replication_factor=len(self.database.bootstrap_servers()) - 1,
         )
 
 
@@ -508,6 +510,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             java_tls=self.java_tls_manager,
             peer=self.peer_handler,
             config=self.config,
+            is_leader=self.unit.is_leader(),
             labels=self.labels,
         )
 

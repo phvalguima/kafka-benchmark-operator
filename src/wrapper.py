@@ -158,13 +158,13 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     """This class maps the workload model to the process."""
 
     @override
-    def _map_prepare(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_prepare(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the prepare phase."""
         # Kafka has nothing to do on prepare
         return None, None
 
     @override
-    def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_run(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
         driver_path = "/root/.benchmark/charmed_parameters/worker_params.yaml"
         workload_path = "/root/.benchmark/charmed_parameters/dpe_benchmark.json"
@@ -184,22 +184,24 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
         ]
         workers = ",".join([f"http://{peer}" for peer in self.args.peers.split(",")])
 
-        manager = KafkaBenchmarkManager(
-            model=ProcessModel(
-                cmd=f"""sudo bin/benchmark --workers {workers} --drivers {driver_path} {workload_path}""",
-                cwd=os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "../openmessaging-benchmark/",
+        manager = None
+        if self.args.is_coordinator:
+            manager = KafkaBenchmarkManager(
+                model=ProcessModel(
+                    cmd=f"""sudo bin/benchmark --workers {workers} --drivers {driver_path} {workload_path}""",
+                    cwd=os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "../openmessaging-benchmark/",
+                    ),
                 ),
-            ),
-            args=self.args,
-            metrics=self.metrics,
-            unstarted_workers=processes,
-        )
+                args=self.args,
+                metrics=self.metrics,
+                unstarted_workers=processes,
+            )
         return manager, processes
 
     @override
-    def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_clean(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the clean phase."""
         # Kafka has nothing to do on prepare
         return None, None
@@ -211,6 +213,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--test_name", type=str, help="Test name to be used")
     parser.add_argument("--command", type=str, help="Command to be executed", default="run")
+    parser.add_argument("--is_coordinator", type=bool, default=False)
     parser.add_argument(
         "--workload", type=str, help="Name of the workload to be executed", default="default"
     )

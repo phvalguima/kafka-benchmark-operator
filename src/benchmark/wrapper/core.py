@@ -61,6 +61,7 @@ class WorkloadCLIArgsModel(BaseModel):
     report_interval: int
     extra_labels: str
     peers: str
+    is_coordinator: bool
 
 
 class BenchmarkMetrics:

@@ -217,16 +217,16 @@ class WorkloadToProcessMapping(ABC):
         raise ValueError(f"Invalid command: {cmd}")
 
     @abstractmethod
-    def _map_prepare(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_prepare(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the prepare phase."""
         ...
 
     @abstractmethod
-    def _map_run(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_run(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
         ...
 
     @abstractmethod
-    def _map_clean(self) -> tuple[BenchmarkManager, list[BenchmarkProcess] | None]:
+    def _map_clean(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the clean phase."""
         ...
