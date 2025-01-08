@@ -33,14 +33,6 @@ class DPBenchmarkPebbleTemplatePaths(WorkloadTemplatePaths):
 
     @property
     @override
-    def workload_params(self) -> str:
-        """The path to the workload parameters folder."""
-        if not self.exists("/root/.benchmark/charmed_parameters"):
-            os.makedirs("/root/.benchmark/charmed_parameters", exist_ok=True)
-        return "/root/.benchmark/charmed_parameters/" + self.svc_name + ".json"
-
-    @property
-    @override
     def service_template(self) -> str:
         """The service template file."""
         return os.path.join(self.templates, "dpe_benchmark.service.j2")

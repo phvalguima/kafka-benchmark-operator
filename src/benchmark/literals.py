@@ -32,6 +32,9 @@ COS_AGENT_RELATION = "cos-agent"
 PEER_RELATION = "benchmark-peer"
 
 
+BENCHMARK_WORKLOAD_PATH = "/root/.benchmark/charmed_parameters"
+
+
 class DPBenchmarkError(Exception):
     """Benchmark error."""
 

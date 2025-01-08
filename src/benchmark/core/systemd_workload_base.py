@@ -23,6 +23,7 @@ from benchmark.core.workload_base import (
     WorkloadBase,
     WorkloadTemplatePaths,
 )
+from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 
 
 class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
@@ -44,17 +45,9 @@ class DPBenchmarkSystemdTemplatePaths(WorkloadTemplatePaths):
         return "dpe_benchmark.service.j2"
 
     @property
-    @override
-    def workload_params(self) -> str:
-        """The path to the workload parameters folder."""
-        if not self.exists("/root/.benchmark/charmed_parameters"):
-            os.makedirs("/root/.benchmark/charmed_parameters", exist_ok=True)
-        return "/root/.benchmark/charmed_parameters/" + self.svc_name + ".json"
-
-    @property
     def results(self) -> str:
         """The path to the results folder."""
-        return "/root/.benchmark/charmed_parameters/results/"
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, "results")
 
     @override
     def exists(self, path: str) -> bool:

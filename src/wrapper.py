@@ -11,6 +11,7 @@ import re
 from overrides import override
 from pydantic import BaseModel
 
+from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 from benchmark.wrapper.core import (
     BenchmarkCommand,
     BenchmarkMetrics,
@@ -166,8 +167,8 @@ class KafkaWorkloadToProcessMapping(WorkloadToProcessMapping):
     @override
     def _map_run(self) -> tuple[BenchmarkManager | None, list[BenchmarkProcess] | None]:
         """Returns the mapping for the run phase."""
-        driver_path = "/root/.benchmark/charmed_parameters/worker_params.yaml"
-        workload_path = "/root/.benchmark/charmed_parameters/dpe_benchmark.json"
+        driver_path = os.path.join(BENCHMARK_WORKLOAD_PATH, "worker_params.yaml")
+        workload_path = os.path.join(BENCHMARK_WORKLOAD_PATH, "dpe_benchmark.json")
         processes = [
             KafkaBenchmarkProcess(
                 model=ProcessModel(

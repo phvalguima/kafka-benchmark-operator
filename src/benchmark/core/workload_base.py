@@ -6,6 +6,8 @@
 import os
 from abc import ABC, abstractmethod
 
+from benchmark.literals import BENCHMARK_WORKLOAD_PATH
+
 
 class WorkloadTemplatePaths(ABC):
     """Interface for workload template paths."""
@@ -44,10 +46,11 @@ class WorkloadTemplatePaths(ABC):
         ...
 
     @property
-    @abstractmethod
     def workload_params(self) -> str:
-        """The path to the workload parameters file."""
-        ...
+        """The path to the workload parameters folder."""
+        if not self.exists(BENCHMARK_WORKLOAD_PATH):
+            os.makedirs(BENCHMARK_WORKLOAD_PATH, exist_ok=True)
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, self.svc_name + ".json")
 
     @property
     @abstractmethod

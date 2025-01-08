@@ -6,6 +6,7 @@
 import logging
 import os
 
+from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 from benchmark.core.workload_base import WorkloadTemplatePaths
 from literals import JAVA_VERSION
 
@@ -32,19 +33,19 @@ class JavaWorkloadPaths:
     @property
     def truststore(self) -> str:
         """Return the truststore path."""
-        return os.path.join(self.paths.charm_dir, "truststore.jks")
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, "truststore.jks")
 
     @property
     def ca(self) -> str:
         """Return the CA path."""
-        return os.path.join(self.paths.charm_dir, "ca.pem")
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, "ca.pem")
 
     @property
     def server_certificate(self) -> str:
         """Return the CA path."""
-        return os.path.join(self.paths.charm_dir, "server_certificate.pem")
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, "server_certificate.pem")
 
     @property
     def keystore(self) -> str:
         """Return the keystore path."""
-        return os.path.join(self.paths.charm_dir, "keystore.jks")
+        return os.path.join(BENCHMARK_WORKLOAD_PATH, "keystore.jks")
