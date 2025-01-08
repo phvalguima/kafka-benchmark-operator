@@ -6,8 +6,8 @@
 import logging
 import os
 
-from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 from benchmark.core.workload_base import WorkloadTemplatePaths
+from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 from literals import JAVA_VERSION
 
 # Log messages can be retrieved using juju debug-log

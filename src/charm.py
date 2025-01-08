@@ -502,10 +502,10 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             self,
             CLIENT_RELATION_NAME,
         )
+        self.peer_handler = KafkaPeersRelationHandler(self, PEER_RELATION)
         self.tls_handler = JavaTlsHandler(self)
 
         self.java_tls_manager = self.tls_handler.tls_manager
-        self.peer_handler = KafkaPeersRelationHandler(self, PEER_RELATION)
         self.config_manager = KafkaConfigManager(
             workload=self.workload,
             database=self.database,

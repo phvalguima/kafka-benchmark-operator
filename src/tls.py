@@ -67,6 +67,11 @@ class JavaTlsHandler(RelationHandler):
         We do not need the CSR or the following certificate. Therefore, we will not use the
         signed certificate nor the generated key.
         """
+        if self.charm.unit.is_leader():
+            # Leader does not defer this event, so we can generate the private key and publish
+            # it across the entire
+            self.tls_manager.truststore_pwd = self.tls_manager.generate_password()
+
         alias = f"{event.app.name}-{event.relation.id}"
         subject = os.uname().nodename
         csr = (
@@ -124,8 +129,6 @@ class JavaTlsHandler(RelationHandler):
                 path=self.tls_manager.java_paths.ca,
             )
 
-        self.tls_manager.truststore_pwd = self.tls_manager.generate_password()
-
         # For now, let's keep all TLS logic here, even if it trigger wider charm changes
         # If we want to later abandon the entire TLS, we can then just remove this file.
         self.charm._on_config_changed(event)
@@ -148,6 +151,8 @@ class JavaTlsStoreManager:
 
     def set(self) -> bool:
         """Sets the truststore and imports the certificates."""
+        if not self.truststore_pwd:
+            return False
         return (
             self.set_truststore()
             and self.import_cert(self.ca_alias, self.java_paths.ca)
@@ -170,8 +175,12 @@ class JavaTlsStoreManager:
     @truststore_pwd.setter
     def truststore_pwd(self, pwd: str) -> None:
         """Returns the truststore password."""
+        if not self.charm.unit.is_leader():
+            # Nothing to do, we manage a single password for the entire application
+            return
+
         if not self.truststore_pwd:
-            self.charm.unit.add_secret({"pwd": pwd}, label=TRUSTSTORE_LABEL)
+            self.charm.app.add_secret({"pwd": pwd}, label=TRUSTSTORE_LABEL)
             return
 
         self.charm.model.get_secret(label=TRUSTSTORE_LABEL).set_content({"pwd": pwd})

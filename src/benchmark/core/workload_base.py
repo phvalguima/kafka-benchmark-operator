@@ -12,6 +12,10 @@ from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 class WorkloadTemplatePaths(ABC):
     """Interface for workload template paths."""
 
+    def __init__(self):
+        if not self.exists(BENCHMARK_WORKLOAD_PATH):
+            os.makedirs(BENCHMARK_WORKLOAD_PATH, exist_ok=True)
+
     @property
     def svc_name(self) -> str:
         """The service name."""
@@ -48,8 +52,6 @@ class WorkloadTemplatePaths(ABC):
     @property
     def workload_params(self) -> str:
         """The path to the workload parameters folder."""
-        if not self.exists(BENCHMARK_WORKLOAD_PATH):
-            os.makedirs(BENCHMARK_WORKLOAD_PATH, exist_ok=True)
         return os.path.join(BENCHMARK_WORKLOAD_PATH, self.svc_name + ".json")
 
     @property
