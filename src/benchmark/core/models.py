@@ -195,6 +195,16 @@ class PeerState(RelationState):
             self.set({LIFECYCLE_KEY: status})
 
     @property
+    def test_name(self) -> str | None:
+        """Return the test name."""
+        return self.relation_data.get("test_name")
+
+    @test_name.setter
+    def test_name(self, name: str | None) -> None:
+        """Sets the test name."""
+        self.set({"test_name": name})
+
+    @property
     def stop(self) -> bool:
         """Returns the value of the stop key."""
         return self.relation_data.get(STOP_KEY, False)

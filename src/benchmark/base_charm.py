@@ -16,12 +16,13 @@ This charm should also be the main entry point to all the modelling of your benc
 
 import logging
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
 import ops
 from charms.grafana_agent.v0.cos_agent import COSAgentProvider
-from ops.charm import CharmEvents
+from ops.charm import CharmEvents, CollectStatusEvent
 from ops.framework import EventBase, EventSource
 from ops.model import BlockedStatus
 
@@ -83,6 +84,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
         self.framework.observe(self.on.prepare_action, self.on_prepare_action)
         self.framework.observe(self.on.run_action, self.on_run_action)
@@ -127,6 +129,7 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             peer=self.peers,
             config=self.config,
             labels=self.labels,
+            test_name=self.peers.test_name,
         )
         self.lifecycle = LifecycleManager(self.peers, self.config_manager)
 
@@ -145,6 +148,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         """Install event."""
         self.workload.install()
         self.peers.state.lifecycle = DPBenchmarkLifecycleState.UNSET
+
+    def _on_collect_unit_status(self, _: CollectStatusEvent):
+        self.unit.status = self.lifecycle.status
 
     def _on_check_collect(self, event: EventBase) -> None:
         """Check if the upload is finished."""
@@ -184,10 +190,10 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             self.unit.status = BlockedStatus("No database relation available")
             return
 
-        # We need to narrow the options of workload_name to the supported ones
-        if self.config.get("workload_name") not in self.supported_workloads():
+        # We need to narrow the options of workload_profile to the supported ones
+        if self.config.get("workload_profile") not in self.supported_workloads():
             self.unit.status = BlockedStatus(
-                f"Unsupported workload: {self.config.get('workload_name')}"
+                f"Unsupported workload: {self.config.get('workload_profile')}"
             )
             return
 
@@ -197,10 +203,10 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
     def _on_config_changed(self, event: EventBase) -> None:
         """Config changed event."""
-        # We need to narrow the options of workload_name to the supported ones
-        if self.config.get("workload_name") not in self.supported_workloads():
+        # We need to narrow the options of workload_profile to the supported ones
+        if self.config.get("workload_profile") not in self.supported_workloads():
             self.unit.status = BlockedStatus(
-                f"Unsupported workload: {self.config.get('workload_name')}"
+                f"Unsupported workload: {self.config.get('workload_profile')}"
             )
             return
 
@@ -249,6 +255,10 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
+        if not self.unit.is_leader():
+            event.fail("Only the leader can prepare the benchmark")
+            return
+
         if not (state := self.lifecycle.next(DPBenchmarkLifecycleTransition.PREPARE)):
             event.fail("Failed to prepare the benchmark: already done")
             return
@@ -258,6 +268,14 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
                 "Another peer is already in prepare state. Wait or call clean action to reset."
             )
             return
+
+        # Generate a test name:
+        if self.peers.test_name:
+            # We already have one, we should inform we cannot prepare the environment
+            event.fail("Test name already set. Call clean action to reset.")
+        test_name = self.config.get("test_name") or "dpe-benchmark"
+        self.peers.test_name = f"{test_name}-{str(int(time.time()))}"
+        self.config_manager.test_name = self.peers.test_name
 
         # We process the special case of PREPARE, as explained in lifecycle.make_transition()
         if not self.config_manager.prepare():
@@ -274,6 +292,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
             event.fail("Missing DB or S3 relations")
             return
 
+        if not self.peers.test_name:
+            event.fail("Test name not set, prepare the benchmark first.")
+
         if not self._process_action_transition(DPBenchmarkLifecycleTransition.RUN):
             event.fail("Failed to run the benchmark")
         event.set_results({"message": "Benchmark has started"})
@@ -283,6 +304,9 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
         if not self._preflight_checks():
             event.fail("Missing DB or S3 relations")
             return
+
+        if not self.peers.test_name:
+            event.fail("Test name not set, prepare the benchmark first.")
 
         if not self._process_action_transition(DPBenchmarkLifecycleTransition.STOP):
             event.fail("Failed to stop the benchmark")
@@ -296,6 +320,12 @@ class DPBenchmarkCharmBase(ops.CharmBase, ABC):
 
         if not self._process_action_transition(DPBenchmarkLifecycleTransition.CLEAN):
             event.fail("Failed to clean the benchmark")
+
+        # Remove a test name:
+        if self.unit.is_leader() and self.peers.test_name:
+            self.peers.test_name = None
+            self.config_manager.test_name = self.peers.test_name
+
         event.set_results({"message": "Benchmark is cleaning"})
 
     def _process_action_transition(self, transition: DPBenchmarkLifecycleTransition) -> bool:

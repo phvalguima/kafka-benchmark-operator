@@ -46,6 +46,7 @@ from benchmark.literals import (
 from benchmark.managers.config import ConfigManager
 from benchmark.managers.lifecycle import LifecycleManager
 from literals import CLIENT_RELATION_NAME, JAVA_VERSION, TOPIC_NAME
+from models import WorkloadTypeParameters
 
 # TODO: This file must go away once Kafka starts sharing its certificates via client relation
 from tls import JavaTlsHandler, JavaTlsStoreManager
@@ -96,12 +97,12 @@ KAFKA_WORKLOAD_PARAMS_TEMPLATE = """name: {{ partitionsPerTopic }} producer / {{
 
 topics: 1
 partitionsPerTopic: {{ partitionsPerTopic }}
-messageSize: 1024
+messageSize: {{ messageSize }}
 payloadFile: "{{ charm_root }}/openmessaging-benchmark/payload/payload-1Kb.data"
 subscriptionsPerTopic: {{ partitionsPerTopic }}
 consumerPerSubscription: 1
 producersPerTopic: {{ partitionsPerTopic }}
-producerRate: 50000
+producerRate: {{ producerRate }}
 consumerBacklogSizeGB: 0
 testDurationMinutes: {{ duration }}
 """
@@ -116,6 +117,7 @@ EnvironmentFile=-/etc/environment
 Environment=PYTHONPATH={{ charm_root }}/lib:{{ charm_root }}/venv:{{ charm_root }}/src/benchmark/wrapper
 ExecStart={{ charm_root }}/src/wrapper.py --test_name={{ test_name }} --command={{ command }} --is_coordinator={{ is_coordinator }} --workload={{ workload_name }} --threads={{ threads }} --parallel_processes={{ parallel_processes }} --duration={{ duration }} --peers={{ peers }} --extra_labels={{ labels }} {{ extra_config }}
 Restart=no
+KillSignal=SIGKILL
 TimeoutSec=600
 Type=simple
 """
@@ -256,8 +258,10 @@ class KafkaConfigManager(ConfigManager):
         peer: KafkaPeersRelationHandler,
         config: dict[str, Any],
         is_leader: bool,
+        test_name: Optional[str] = None,
         labels: Optional[str] = "",
     ):
+        super().__init__(workload, database, peer, config, labels, test_name)
         self.workload = workload
         self.workload.worker_params_template = KAFKA_WORKER_PARAMS_TEMPLATE
         self.java_tls = java_tls
@@ -356,12 +360,15 @@ class KafkaConfigManager(ConfigManager):
     @override
     def get_workload_params(self) -> dict[str, Any]:
         """Return the worker parameters."""
+        workload = WorkloadTypeParameters[self.config.get("workload_profile")]
         return {
             "partitionsPerTopic": self.config.get("parallel_processes"),
             "duration": int(self.config.get("duration") / 60)
             if self.config.get("duration") > 0
             else TEN_YEARS_IN_MINUTES,
             "charm_root": self.workload.paths.charm_dir,
+            "producerRate": workload.producer_rate,
+            "messageSize": workload.message_size,
         }
 
     @override
@@ -393,7 +400,7 @@ class KafkaConfigManager(ConfigManager):
         try:
             topic = NewTopic(
                 name=self.database.state.get().db_name,
-                num_partitions=self.config.get("threads") * self.config.get("parallel_processes"),
+                num_partitions=self.config.get("parallel_processes"),
                 replication_factor=self.client.replication_factor,
             )
             self.client.create_topic(topic)
@@ -417,6 +424,9 @@ class KafkaConfigManager(ConfigManager):
         """Clean the benchmark service."""
         try:
             self.client.delete_topics([self.database.state.get().db_name])
+            self.workload.remove(self.workload.paths.service)
+            self.workload.reload()
+
         except Exception as e:
             logger.info(f"Error deleting topic: {e}")
         return self.is_cleaned()
@@ -514,6 +524,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
             config=self.config,
             is_leader=self.unit.is_leader(),
             labels=self.labels,
+            test_name=self.peers.test_name,
         )
 
         self.lifecycle = KafkaLifecycleManager(
@@ -532,10 +543,10 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
 
         In kafka case, we need the client relation to be able to connect to the database.
         """
-        if self.config.get("parallel_processes") < 2:
+        if self.config.get("parallel_processes") * (len(self.peers.units()) + 1) < 2:
             logger.error("The number of parallel processes must be greater than 1.")
             self.unit.status = BlockedStatus(
-                "The number of parallel processes must be greater than 1."
+                "The number of parallel processes or peers must be greater than 1."
             )
             return False
         return super()._preflight_checks()
@@ -563,7 +574,7 @@ class KafkaBenchmarkOperator(DPBenchmarkCharmBase):
     @override
     def supported_workloads(self) -> list[str]:
         """List of supported workloads."""
-        return ["default"]
+        return list(WorkloadTypeParameters.keys())
 
 
 if __name__ == "__main__":

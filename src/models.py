@@ -6,12 +6,28 @@
 import logging
 import os
 
+from pydantic import BaseModel
+
 from benchmark.core.workload_base import WorkloadTemplatePaths
 from benchmark.literals import BENCHMARK_WORKLOAD_PATH
 from literals import JAVA_VERSION
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
+
+
+class WorkloadType(BaseModel):
+    """Workload type parameters."""
+
+    message_size: int
+    producer_rate: int
+
+
+WorkloadTypeParameters = {
+    "test_mode": WorkloadType(message_size=1024, producer_rate=1),
+    "default": WorkloadType(message_size=1024, producer_rate=100000),
+    "max": WorkloadType(message_size=1024, producer_rate=10000000),
+}
 
 
 class JavaWorkloadPaths:

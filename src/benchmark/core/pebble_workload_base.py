@@ -69,9 +69,7 @@ class DPBenchmarkPebbleWorkloadBase(WorkloadBase):
     @override
     def halt(self) -> bool:
         """Stop the benchmark service."""
-        if self.is_running():
-            return service_stop(self.paths.svc_name)
-        return self.is_stopped()
+        return service_stop(self.paths.svc_name)
 
     @override
     def reload(self) -> bool:

@@ -91,3 +91,25 @@ class PeerRelationHandler(Object):
             relation=self.relation,
             scope=Scope.APP,
         )
+
+    @property
+    def test_name(self) -> str | None:
+        """Return the app data."""
+        if not self.relation:
+            return None
+
+        return PeerState(
+            component=self.relation.app,
+            relation=self.relation,
+            scope=Scope.APP,
+        ).test_name
+
+    @test_name.setter
+    def test_name(self, name=str | None) -> None:
+        """Return the app data."""
+        state = PeerState(
+            component=self.relation.app,
+            relation=self.relation,
+            scope=Scope.APP,
+        )
+        state.test_name = name

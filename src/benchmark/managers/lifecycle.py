@@ -3,6 +3,9 @@
 
 """The lifecycle manager class."""
 
+from abc import ABC, abstractmethod
+from typing import Optional
+
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
@@ -97,127 +100,16 @@ class LifecycleManager:
         self.peers.unit_state(self.peers.this_unit()).lifecycle = new_state.value
         return True
 
-    def next(  # noqa: C901
+    def next(
         self, transition: DPBenchmarkLifecycleTransition | None = None
     ) -> DPBenchmarkLifecycleState | None:
         """Return the next lifecycle state."""
-        # Changes that takes us to UNSET:
-        if transition == DPBenchmarkLifecycleTransition.CLEAN:
-            # Simplest case, we return to unset
-            return DPBenchmarkLifecycleState.UNSET
-
-        # Changes that takes us to STOPPED:
-        # Either we received a stop transition
-        if transition == DPBenchmarkLifecycleTransition.STOP:
-            return DPBenchmarkLifecycleState.STOPPED
-        # OR one of our peers is in stopped state
-        if (
-            self._compare_lifecycle_states(
-                self._peers_state(),
-                DPBenchmarkLifecycleState.STOPPED,
-            )
-            == 0
-        ):
-            return DPBenchmarkLifecycleState.STOPPED
-
-        # FAILED takes precedence over all other states
-        # Changes that takes us to FAILED:
-        # Workload has failed and we were:
-        # - PREPARING
-        # - RUNNING
-        # - COLLECTING
-        # - UPLOADING
-        if (
-            self.current()
-            in [
-                DPBenchmarkLifecycleState.PREPARING,
-                DPBenchmarkLifecycleState.RUNNING,
-                DPBenchmarkLifecycleState.COLLECTING,
-                DPBenchmarkLifecycleState.UPLOADING,
-            ]
-            and self.config_manager.workload.is_failed()
-        ):
-            return DPBenchmarkLifecycleState.FAILED
-
-        # Changes that takes us to PREPARING:
-        # We received a prepare signal and no one else is available yet or we failed previously
-        if transition == DPBenchmarkLifecycleTransition.PREPARE and self._peers_state() in [
-            DPBenchmarkLifecycleState.UNSET,
-            DPBenchmarkLifecycleState.FAILED,
-        ]:
-            return DPBenchmarkLifecycleState.PREPARING
-        elif transition == DPBenchmarkLifecycleTransition.PREPARE:
-            # Failed to calculate a proper state as we have neighbors in more advanced state for now
-            return None
-
-        # Changes that takes us to AVAILABLE:
-        # Either we were in preparing and we are finished
-        if (
-            self.current() == DPBenchmarkLifecycleState.PREPARING
-            and self.config_manager.is_prepared()
-        ):
-            return DPBenchmarkLifecycleState.AVAILABLE
-        # OR highest peers state is AVAILABLE but no actions has happened
-        if (
-            transition is None
-            and self._compare_lifecycle_states(
-                self._peers_state(),
-                DPBenchmarkLifecycleState.AVAILABLE,
-            )
-            == 0
-        ):
-            return DPBenchmarkLifecycleState.AVAILABLE
-
-        # Changes that takes us to RUNNING:
-        # Either we receive a transition to running and we were in one of:
-        # - AVAILABLE
-        # - FAILED
-        # - STOPPED
-        # - FINISHED
-        if transition == DPBenchmarkLifecycleTransition.RUN and self.current() in [
-            DPBenchmarkLifecycleState.AVAILABLE,
-            DPBenchmarkLifecycleState.FAILED,
-            DPBenchmarkLifecycleState.STOPPED,
-            DPBenchmarkLifecycleState.FINISHED,
-        ]:
-            return DPBenchmarkLifecycleState.RUNNING
-        # OR any other peer is beyond the >=RUNNING state
-        # and we are still AVAILABLE.
-        if self._compare_lifecycle_states(
-            self._peers_state(),
-            DPBenchmarkLifecycleState.RUNNING,
-        ) == 0 and self.current() in [
-            DPBenchmarkLifecycleState.UNSET,
-            DPBenchmarkLifecycleState.AVAILABLE,
-        ]:
-            return DPBenchmarkLifecycleState.RUNNING
-
-        # Changes that takes us to COLLECTING:
-        # the workload is in collecting state
-        if self.config_manager.is_collecting():
-            return DPBenchmarkLifecycleState.COLLECTING
-
-        # Changes that takes us to UPLOADING:
-        # the workload is in uploading state
-        if self.config_manager.is_uploading():
-            return DPBenchmarkLifecycleState.UPLOADING
-
-        # Changes that takes us to FINISHED:
-        # Workload has finished and we were in one of:
-        # - RUNNING
-        # - UPLOADING
-        if (
-            self.current()
-            in [
-                DPBenchmarkLifecycleState.RUNNING,
-                DPBenchmarkLifecycleState.UPLOADING,
-            ]
-            and self.config_manager.workload.is_halted()
-        ):
-            return DPBenchmarkLifecycleState.FINISHED
-
-        # We are in an incongruent state OR the transition does not make sense
-        return None
+        lifecycle_state = _LifecycleStateFactory().build(
+            self,
+            self.current(),
+        )
+        result = lifecycle_state.next(transition)
+        return result.state if result else None
 
     def _peers_state(self) -> DPBenchmarkLifecycleState | None:
         next_state = self.peers.unit_state(self.peers.this_unit()).lifecycle
@@ -301,3 +193,254 @@ class LifecycleManager:
                 return 8
 
         return _get_value(neighbor) - _get_value(this)
+
+
+class _LifecycleState(ABC):
+    """The lifecycle state represents a single state and encapsulates the transition logic."""
+
+    state: DPBenchmarkLifecycleState
+
+    def __init__(self, manager: LifecycleManager):
+        self.manager = manager
+
+    from typing import Optional, Union
+
+    @abstractmethod
+    def next(
+        self, transition: Optional[DPBenchmarkLifecycleTransition] = None
+    ) -> Optional["_LifecycleState"]: ...
+
+
+class _StoppedLifecycleState(_LifecycleState):
+    """The stopped lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.STOPPED
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_running():
+            return _RunningLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.RUN:
+            return _RunningLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_failed():
+            return _FailedLifecycleState(self.manager)
+
+        return None
+
+
+class _FailedLifecycleState(_LifecycleState):
+    """The failed lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.FAILED
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_running():
+            return _RunningLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.RUN:
+            return _RunningLifecycleState(self.manager)
+
+        return None
+
+
+class _FinishedLifecycleState(_LifecycleState):
+    """The finished lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.FINISHED
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.STOP:
+            return _StoppedLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_running():
+            return _RunningLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.RUN:
+            return _RunningLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_failed():
+            return _FailedLifecycleState(self.manager)
+
+        return None
+
+
+class _RunningLifecycleState(_LifecycleState):
+    """The running lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.RUNNING
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.STOP:
+            return _StoppedLifecycleState(self.manager)
+
+        if (
+            self.manager._compare_lifecycle_states(
+                self.manager._peers_state(),
+                DPBenchmarkLifecycleState.STOPPED,
+            )
+            == 0
+        ):
+            return _StoppedLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_failed():
+            return _FailedLifecycleState(self.manager)
+
+        if not self.manager.config_manager.is_running():
+            # TODO: Collect state should be implemented here instead
+            return _FinishedLifecycleState(self.manager)
+
+        return None
+
+
+class _AvailableLifecycleState(_LifecycleState):
+    """The available lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.AVAILABLE
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.RUN:
+            return _RunningLifecycleState(self.manager)
+
+        if (
+            self.manager._compare_lifecycle_states(
+                self.manager._peers_state(),
+                DPBenchmarkLifecycleState.RUNNING,
+            )
+            == 0
+        ):
+            return _RunningLifecycleState(self.manager)
+
+        return None
+
+
+class _PreparingLifecycleState(_LifecycleState):
+    """The preparing lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.PREPARING
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if self.manager.peers.test_name is None:
+            # We have to roll back to UNSET
+            return _UnsetLifecycleState(self.manager)
+
+        if transition == DPBenchmarkLifecycleTransition.CLEAN:
+            return _UnsetLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_failed():
+            return _FailedLifecycleState(self.manager)
+
+        if self.manager.config_manager.is_prepared():
+            return _AvailableLifecycleState(self.manager)
+
+        return None
+
+
+class _UnsetLifecycleState(_LifecycleState):
+    """The unset lifecycle state."""
+
+    state = DPBenchmarkLifecycleState.UNSET
+
+    def next(
+        self, transition: DPBenchmarkLifecycleTransition | None = None
+    ) -> Optional["_LifecycleState"]:
+        if transition == DPBenchmarkLifecycleTransition.PREPARE:
+            return _PreparingLifecycleState(self.manager)
+
+        if (
+            self.manager._compare_lifecycle_states(
+                self.manager._peers_state(),
+                DPBenchmarkLifecycleState.AVAILABLE,
+            )
+            == 0
+        ):
+            return _AvailableLifecycleState(self.manager)
+
+        if (
+            self.manager._compare_lifecycle_states(
+                self.manager._peers_state(),
+                DPBenchmarkLifecycleState.RUNNING,
+            )
+            == 0
+        ):
+            return _RunningLifecycleState(self.manager)
+
+        return None
+
+
+class _LifecycleStateFactory:
+    """The lifecycle state factory."""
+
+    def build(
+        self, manager: LifecycleManager, state: DPBenchmarkLifecycleState
+    ) -> _LifecycleState:
+        """Build the lifecycle state."""
+        if state == DPBenchmarkLifecycleState.UNSET:
+            return _UnsetLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.PREPARING:
+            return _PreparingLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.AVAILABLE:
+            return _AvailableLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.RUNNING:
+            return _RunningLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.FAILED:
+            return _FailedLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.FINISHED:
+            return _FinishedLifecycleState(manager)
+
+        if state == DPBenchmarkLifecycleState.STOPPED:
+            return _StoppedLifecycleState(manager)
+
+        raise ValueError("Unknown state")

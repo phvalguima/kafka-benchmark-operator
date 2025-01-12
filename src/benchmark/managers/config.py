@@ -9,10 +9,10 @@ and returns a model containing that information.
 
 import logging
 import os
-import time
 from abc import abstractmethod
 from typing import Any, Optional
 
+import pydantic
 from jinja2 import DictLoader, Environment, FileSystemLoader, exceptions
 
 from benchmark.core.models import (
@@ -37,37 +37,35 @@ class ConfigManager:
         peer: PeerRelationHandler,
         config: dict[str, Any],
         labels: str,
+        test_name: Optional[str] = None,
     ):
         self.workload = workload
         self.config = config
         self.peer = peer
         self.database = database
         self.labels = labels
+        self.test_name = test_name
 
     @abstractmethod
     def get_workload_params(self) -> dict[str, Any]:
         """Return the workload parameters."""
         ...
 
-    @abstractmethod
     def clean(self) -> bool:
         """Clean the benchmark service."""
-        ...
+        try:
+            self.workload.disable()
+            self.workload.remove(self.workload.paths.service)
+            self.workload.reload()
+
+        except Exception as e:
+            logger.info(f"Error deleting topic: {e}")
+        return self.is_cleaned()
 
     @abstractmethod
     def is_cleaned(self) -> bool:
         """Checks if the benchmark service has passed its "prepare" status."""
         ...
-
-    @property
-    def _test_name(self) -> str:
-        """Return the test name."""
-        return self.config.get("test_name") or "dpe-benchmark"
-
-    @property
-    def test_name(self) -> str:
-        """Return the test name."""
-        return self._test_name + "-" + str(int(time.time()))
 
     def get_execution_options(
         self,
@@ -81,19 +79,23 @@ class ConfigManager:
             # It means we are not yet ready. Return None
             # This check also serves to ensure we have only one valid relation at the time
             return None
-        return DPBenchmarkWrapperOptionsModel(
-            test_name=self.test_name,
-            parallel_processes=self.config.get("parallel_processes"),
-            threads=self.config.get("threads"),
-            duration=self.config.get("duration"),
-            run_count=self.config.get("run_count"),
-            db_info=db,
-            workload_name=self.config.get("workload_name"),
-            report_interval=self.config.get("report_interval"),
-            workload_profile=self.config.get("workload_profile"),
-            labels=self.labels,
-            peers=",".join(self.peer.peers()),
-        )
+        try:
+            return DPBenchmarkWrapperOptionsModel(
+                test_name=self.test_name,
+                parallel_processes=self.config.get("parallel_processes"),
+                threads=self.config.get("threads"),
+                duration=self.config.get("duration"),
+                run_count=self.config.get("run_count"),
+                db_info=db,
+                workload_name=self.config.get("workload_name"),
+                report_interval=self.config.get("report_interval"),
+                workload_profile=self.config.get("workload_profile"),
+                labels=self.labels,
+                peers=",".join(self.peer.peers()),
+            )
+        except pydantic.error_wrappers.ValidationError:
+            # Missing options
+            return None
 
     def is_collecting(self) -> bool:
         """Check if the workload is collecting data."""

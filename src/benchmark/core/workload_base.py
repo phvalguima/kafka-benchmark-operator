@@ -112,6 +112,16 @@ class WorkloadBase(ABC):
         ...
 
     @abstractmethod
+    def enable(self) -> bool:
+        """Enables service."""
+        ...
+
+    @abstractmethod
+    def disable(self) -> bool:
+        """Disables service."""
+        ...
+
+    @abstractmethod
     def read(self, path: str) -> list[str]:
         """Reads a file from the workload.
 
@@ -133,6 +143,10 @@ class WorkloadBase(ABC):
             mode: the write mode. Usually "w" for write, or "a" for append. Default "w"
         """
         ...
+
+    def remove(self, path: str) -> None:
+        """Remove the specified file."""
+        os.remove(path)
 
     @abstractmethod
     def exec(
